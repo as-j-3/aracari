@@ -1,0 +1,41 @@
+# Apache protection for storage directory
+<IfModule mod_authz_core.c>
+    <RequireAll>
+        Require ip 127.0.0.1
+        Require ip ::1
+        Require ip 192.168.1.0/24
+        Require ip 10.0.0.0/8
+        Require ip 172.16.0.0/12
+    </RequireAll>
+</IfModule>
+
+# Deny access to all
+<IfModule !mod_authz_core.c>
+    Order deny,allow
+    Deny from all
+    Allow from 127.0.0.1
+    Allow from ::1
+    Allow from 192.168.1.0/24
+    Allow from 10.0.0.0/8
+    Allow from 172.16.0.0/12
+</IfModule>
+
+# Prevent directory listing
+Options -Indexes
+
+# Disable script execution
+<Files "*.php">
+    Deny from all
+</Files>
+<Files "*.phtml">
+    Deny from all
+</Files>
+<Files "*.php3">
+    Deny from all
+</Files>
+<Files "*.php4">
+    Deny from all
+</Files>
+<Files "*.php5">
+    Deny from all
+</Files>
