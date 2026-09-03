@@ -233,7 +233,7 @@ class BookingController extends Controller
         ]);
 
         $userId = auth()->id();
-        $result = $this->bookingService->holdSeats($uuid, $request->input('seat_ids'), $userId, 5);
+        $result = $this->bookingService->holdSeats($uuid, $request->input('seat_ids'), $userId, 2);
 
         if (!$result['success']) {
             return $this->error($result['message'] ?? 'فشل مسك المقاعد المؤقت', null, 422);

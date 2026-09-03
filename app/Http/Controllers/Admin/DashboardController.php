@@ -9,109 +9,26 @@ use App\Constants\BookingStatus;
 use App\Services\CurrencyService;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\Cache;
+use App\Services\Admin\DashboardService;
+use Symfony\Component\HttpFoundation\JsonResponse;
 
 class DashboardController extends Controller
 {
-    private const CACHE_TTL = 300;
-    private CurrencyService $currencyService;
+    private DashboardService $dashboardService;
 
-    public function __construct(CurrencyService $currencyService)
+    public function __construct(DashboardService $dashboardService)
     {
-        $this->currencyService = $currencyService;
+        $this->dashboardService = $dashboardService;
         $this->middleware('require.admin');
     }
-
-    public function index(): View
+    public function index(): JsonResponse
     {
-        $stats = $this->getStats();
+        $data = $this->dashboardService->getDashboardData();
 
-        return view('admin.dashboard', [
-            'totalTrips'     => $stats['total_trips'],
-            'activeTrips'    => $stats['active_trips'],
-            'todaysBookings' => $stats['todays_bookings'],
-            'totalRevenue'   => $stats['total_revenue'],
-            'upcomingTrips'  => $this->getUpcomingTrips(),
-            'recentBookings' => $this->getRecentBookings(),
-            'baseCurrency'   => $this->currencyService->baseCurrency(),
-        ]);
-    }
-
-    private function getStats(): array
-    {
-        return Cache::remember('admin_dashboard_stats_v2', self::CACHE_TTL, function () {
-            return [
-                'total_trips' => Trip::count(),
-                'active_trips' => Trip::where('departure_time', '>=', now())->count(),
-                'todays_bookings' => Booking::whereDate('created_at', today())->count(),
-                'total_revenue' => (float) Booking::whereIn('booking_status_id', [BookingStatus::CONFIRMED])
-                    ->sum('base_amount'),
-            ];
-        });
-    }
-
-    private function getUpcomingTrips()
-    {
-        return Cache::remember('admin_dashboard_upcoming_trips', 60, function () {
-            return Trip::with(['departureCity', 'destinationCity', 'vehicle'])
-                ->where('departure_time', '>=', now())
-                ->orderBy('departure_time')
-                ->limit(5)
-                ->get()
-                ->map(function ($trip) {
-                    $bookedSeats = $trip->getBookedSeatIds() ?? [];
-                    $totalSeats = $trip->vehicle?->seats()->count() ?? 0;
-
-                    return [
-                        'id' => $trip->id,
-                        'uuid' => $trip->uuid,
-                        'code' => $trip->uuid,
-                        'origin' => $trip->departureCity?->name ?? '—',
-                        'destination' => $trip->destinationCity?->name ?? '—',
-                        'departure_date' => $trip->departure_time?->format('Y-m-d'),
-                        'departure_time' => $trip->departure_time?->format('H:i'),
-                        'booked_seats' => count($bookedSeats),
-                        'total_seats' => $totalSeats,
-                    ];
-                });
-        });
-    }
-
-    private function getRecentBookings()
-    {
-        return Cache::remember('admin_dashboard_recent_bookings', 60, function () {
-            return Booking::with(['user', 'status', 'tripReservations.trip'])
-                ->latest()
-                ->limit(5)
-                ->get()
-                ->map(function ($booking) {
-                    $trip = $booking->tripReservations->first()?->trip;
-                    $route = '—';
-                    if ($trip) {
-                        $route = ($trip->departureCity?->name ?? '—') . ' ← ' . ($trip->destinationCity?->name ?? '—');
-                    }
-
-                    $statusKey = match($booking->booking_status_id) {
-                        BookingStatus::CONFIRMED => 'paid',
-                        BookingStatus::PENDING => 'pending',
-                        BookingStatus::CANCELLED, BookingStatus::CANCELLED_BY_USER, BookingStatus::CANCELLED_BY_ADMIN => 'cancelled',
-                        default => 'pending'
-                    };
-
-                    $statusLabels = [
-                        'paid' => 'مدفوع',
-                        'pending' => 'قيد الانتظار',
-                        'cancelled' => 'ملغي',
-                    ];
-
-                    return [
-                        'user_name' => $booking->user?->name ?? 'عميل',
-                        'time_ago' => $booking->created_at?->diffForHumans(),
-                        'trip_route' => $route,
-                        'amount' => (float) ($booking->base_amount ?? 0),
-                        'status' => $statusKey,
-                        'status_label' => $statusLabels[$statusKey] ?? 'قيد الانتظار',
-                    ];
-                });
-        });
+        return response()->json([
+            'success' => true,
+            'message' => 'تم جلب بيانات لوحة التحكم بنجاح',
+            'data'    => $data,
+        ], 200);
     }
 }

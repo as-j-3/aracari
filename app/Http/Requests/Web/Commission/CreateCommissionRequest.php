@@ -15,10 +15,12 @@ class CreateCommissionRequest extends FormRequest
     {
         return [
             'commission_type' => 'required|in:fixed,percentage',
-            'calculation_level' => 'required|in:service,booking',
+            'calculation_level' => 'nullable|in:service,booking',
             'description' => 'nullable|string|max:500',
+            'provider_uuid' => 'required|uuid|exists:provider_services,uuid',
+            'currency_id' =>   'nullable|exists:currencies,id',
             'value' => [
-                'nullable',
+                'required',
                 'numeric',
                 'min:0',
                 function ($attribute, $value, $fail) {
@@ -27,7 +29,7 @@ class CreateCommissionRequest extends FormRequest
                     }
                 },
             ],
-    ];
+        ];
     }
 
     public function messages(): array
@@ -35,8 +37,10 @@ class CreateCommissionRequest extends FormRequest
         return [
             'commission_type.required' => 'نوع العمولة مطلوب',
             'commission_type.in' => 'نوع العمولة يجب أن يكون ثابت أو نسبة مئوية',
-            'calculation_level.required' => 'مستوى الحساب مطلوب',
             'calculation_level.in' => 'مستوى الحساب يجب أن يكون خدمة أو حجز',
+            'provider_uuid.required' => 'مزود الخدمة مطلوب',
+            'provider_uuid.exists' => 'مزود الخدمة المحدد غير موجود',
+            'currency_id.exists' => 'العملة المحددة غير موجودة',
             'description.max' => 'الوصف يجب ألا يزيد عن 500 حرف',
             'value.required' => 'قيمة العمولة مطلوبة',
             'value.numeric' => 'قيمة العمولة يجب أن تكون رقمًا',

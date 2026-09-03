@@ -18,8 +18,8 @@ class TripSeatHoldTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** العميل A يستطيع عمل Hold للمقعد لمدة 5 دقائق. */
-    public function test_user_can_hold_a_seat_for_five_minutes(): void
+    /** العميل A يستطيع عمل Hold للمقعد لمدة دقيقتين. */
+    public function test_user_can_hold_a_seat_for_two_minutes(): void
     {
         $user = User::factory()->create();
         [$trip, $seat] = $this->createTripWithSeat();
@@ -35,90 +35,134 @@ class TripSeatHoldTest extends TestCase
             ->where('seat_id', $seat->id)
             ->firstOrFail();
 
-        $this->assertSame(TripSeatStatus::HELD, (int) $tripSeat->trip_seat_status_id);
-        $this->assertSame($user->id, (int) $tripSeat->user_id);
+        // التأكد أن حالة المقعد HELD
+        $this->assertSame(
+            TripSeatStatus::HELD,
+            (int) $tripSeat->trip_seat_status_id
+        );
+
+        // التأكد أن المقعد مرتبط بالمستخدم
+        $this->assertSame(
+            $user->id,
+            (int) $tripSeat->user_id
+        );
+
+        // التأكد من وجود وقت انتهاء
         $this->assertNotNull($tripSeat->reserved_until);
 
+        // التأكد أن مدة الـ Hold حوالي دقيقتين
         $this->assertTrue($tripSeat->reserved_until->between(
-            now()->addMinutes(4)->addSeconds(50),
-            now()->addMinutes(5)->addSeconds(10)
+            now()->addMinutes(1)->addSeconds(50),
+            now()->addMinutes(2)->addSeconds(10)
         ));
     }
 
-    /** العميل B لا يستطيع أخذ مقعد Held للعميل A قبل انتهاء الـ 5 دقائق. */
+    /** العميل B لا يستطيع أخذ مقعد Held للعميل A قبل انتهاء الدقيقتين. */
     public function test_second_user_cannot_hold_a_seat_held_by_another_user(): void
     {
         $userA = User::factory()->create();
         $userB = User::factory()->create();
+
         [$trip, $seat] = $this->createTripWithSeat();
 
+        // المستخدم A يمسك المقعد
         $this->actingAs($userA, 'sanctum')->postJson(
             "/api/trips/{$trip->uuid}/hold-seats",
             ['seat_ids' => [$seat->id]]
         )->assertSuccessful();
 
+        // المستخدم B يحاول أخذ نفس المقعد قبل انتهاء الدقيقتين
         $response = $this->actingAs($userB, 'sanctum')->postJson(
             "/api/trips/{$trip->uuid}/hold-seats",
             ['seat_ids' => [$seat->id]]
         );
 
+        // يجب رفض الطلب
         $response->assertStatus(422);
 
+        // التأكد أن المقعد ما زال مع المستخدم A
         $tripSeat = TripSeat::where('trip_id', $trip->id)
             ->where('seat_id', $seat->id)
             ->firstOrFail();
 
-        $this->assertSame($userA->id, (int) $tripSeat->user_id);
-        $this->assertSame(TripSeatStatus::HELD, (int) $tripSeat->trip_seat_status_id);
+        $this->assertSame(
+            $userA->id,
+            (int) $tripSeat->user_id
+        );
+
+        $this->assertSame(
+            TripSeatStatus::HELD,
+            (int) $tripSeat->trip_seat_status_id
+        );
     }
 
     /** العميل نفسه يستطيع الاستمرار في الحجز خلال فترة الـ Hold. */
     public function test_same_user_can_continue_with_his_active_hold(): void
     {
         $user = User::factory()->create();
+
         [$trip, $seat] = $this->createTripWithSeat();
 
+        // المستخدم يمسك المقعد
         $this->actingAs($user, 'sanctum')->postJson(
             "/api/trips/{$trip->uuid}/hold-seats",
             ['seat_ids' => [$seat->id]]
         )->assertSuccessful();
 
+        // نفس المستخدم يحاول الاستمرار
         $response = $this->actingAs($user, 'sanctum')->postJson(
             "/api/trips/{$trip->uuid}/hold-seats",
             ['seat_ids' => [$seat->id]]
         );
 
+        // يجب أن ينجح
         $response->assertSuccessful();
     }
 
-    /** بعد انتهاء الـ Hold يستطيع مستخدم آخر أخذ المقعد. */
+    /** بعد انتهاء الدقيقتين يستطيع مستخدم آخر أخذ المقعد. */
     public function test_expired_hold_can_be_taken_by_another_user(): void
     {
         $userA = User::factory()->create();
         $userB = User::factory()->create();
+
         [$trip, $seat] = $this->createTripWithSeat();
 
+        // المستخدم A يمسك المقعد
         $this->actingAs($userA, 'sanctum')->postJson(
             "/api/trips/{$trip->uuid}/hold-seats",
             ['seat_ids' => [$seat->id]]
         )->assertSuccessful();
 
-        Carbon::setTestNow(now()->addMinutes(6));
+        // نحرك الوقت إلى بعد انتهاء الدقيقتين
+        Carbon::setTestNow(
+            now()->addMinutes(2)->addSecond()
+        );
 
+        // المستخدم B يحاول أخذ المقعد
         $response = $this->actingAs($userB, 'sanctum')->postJson(
             "/api/trips/{$trip->uuid}/hold-seats",
             ['seat_ids' => [$seat->id]]
         );
 
+        // يجب أن ينجح لأن الـ Hold انتهى
         $response->assertSuccessful();
 
         $tripSeat = TripSeat::where('trip_id', $trip->id)
             ->where('seat_id', $seat->id)
             ->firstOrFail();
 
-        $this->assertSame(TripSeatStatus::HELD, (int) $tripSeat->trip_seat_status_id);
-        $this->assertSame($userB->id, (int) $tripSeat->user_id);
+        // المقعد أصبح Held للمستخدم B
+        $this->assertSame(
+            TripSeatStatus::HELD,
+            (int) $tripSeat->trip_seat_status_id
+        );
 
+        $this->assertSame(
+            $userB->id,
+            (int) $tripSeat->user_id
+        );
+
+        // إعادة الوقت للوضع الطبيعي
         Carbon::setTestNow();
     }
 
@@ -126,8 +170,10 @@ class TripSeatHoldTest extends TestCase
     public function test_booked_seat_cannot_be_held(): void
     {
         $user = User::factory()->create();
+
         [$trip, $seat] = $this->createTripWithSeat();
 
+        // إنشاء المقعد بحالة BOOKED
         TripSeat::create([
             'trip_id' => $trip->id,
             'seat_id' => $seat->id,
@@ -137,14 +183,19 @@ class TripSeatHoldTest extends TestCase
             'reserved_until' => null,
         ]);
 
+        // محاولة عمل Hold للمقعد المحجوز
         $response = $this->actingAs($user, 'sanctum')->postJson(
             "/api/trips/{$trip->uuid}/hold-seats",
             ['seat_ids' => [$seat->id]]
         );
 
+        // يجب رفض الطلب
         $response->assertStatus(422);
     }
 
+    /**
+     * إنشاء رحلة ومقعد لاستخدامهما في الاختبارات.
+     */
     private function createTripWithSeat(): array
     {
         $this->createStatuses();
@@ -164,6 +215,9 @@ class TripSeatHoldTest extends TestCase
         return [$trip, $seat];
     }
 
+    /**
+     * إنشاء حالات مقاعد الرحلات.
+     */
     private function createStatuses(): void
     {
         $statuses = [

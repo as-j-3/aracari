@@ -20,6 +20,48 @@ class ProviderAuthController extends Controller
     ) {}
 
 
+public function register(\App\Http\Requests\Api\Auth\DirectRegisterRequest $request): JsonResponse
+{
+    try {
+        $data = $request->validated();
+        $data['type_user_code'] = $data['type_user_code'] ?? \App\Constants\UserTypes::PROVIDER;
+
+        $result = $this->authService->directRegisterUser($data);
+
+        if (!$result['success']) {
+            return $this->error(
+                $result['message'],
+                null,
+                $result['code'] ?? 400
+            );
+        }
+
+        $user = $result['data']['user'] ?? null;
+
+        return $this->success(
+            [
+                'user_id' => $user?->id,
+                'name' => $user?->name,
+                'phone_number' => $user?->phone_number,
+                'is_approved' => $user?->is_approved,
+                'status' => $user?->status?->status_code,
+                'user_type' => $user?->userType?->type_name,
+            ],
+            $result['message'],
+            201
+        );
+
+    } catch (\Exception $e) {
+        Log::error('Provider direct register failed: ' . $e->getMessage());
+
+        return $this->error(
+            'حدث خطأ أثناء إنشاء حساب المزود. يرجى المحاولة مرة أخرى.',
+            null,
+            500
+        );
+    }
+}
+
     public function login(ProviderAuthLoginRequest $request): JsonResponse
     {
         try {

@@ -98,7 +98,14 @@ class AuthController extends Controller
         $result = $this->authService->login($data);
 
         if (!$result['success']) {
-            return $this->error($result['message'], $result['code'] ?? 401);
+            if (!empty($result['needs_otp'])) {
+                return $this->error($result['message'], [
+                    'needs_otp' => true,
+                    'uuid' => $result['uuid'] ?? null,
+                ], $result['code'] ?? 403);
+            }
+
+            return $this->error($result['message'], null, $result['code'] ?? 401);
         }
 
         if (isset($result['data']['user'])) {

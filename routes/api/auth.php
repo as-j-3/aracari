@@ -66,6 +66,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
 });
 Route::controller(ProviderAuthController::class)->group(function () {
     
+    Route::post('/provider/register', 'register')
+        ->name('api.provider.register')
+        ->middleware('throttle:5,1');
+
     Route::post('/provider/login', 'login')
         ->name('api.provider.login')
         ->middleware('throttle:5,1');

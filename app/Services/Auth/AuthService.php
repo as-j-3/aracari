@@ -84,7 +84,7 @@ class AuthService
 
             return [
                 'success' => false,
-                'message' => 'بيانات الدخول غير صحيحة',
+                'message' => 'حسابك يحتاج إلى تفعيل. تم إرسال رمز التحقق.',
                 'needs_otp' => true,
                 'uuid' => $user->uuid,
                 'code' => 401,
@@ -402,6 +402,48 @@ class AuthService
             return [
                 'success' => false,
                 'message' => 'فشل إنشاء الحساب: ' . $e->getMessage(),
+            ];
+        }
+    }
+
+    public function directRegisterUser(array $data): array
+    {
+        try {
+            $user = $this->userRepository->create([
+                'name' => $data['name'],
+                'email' => $data['email'] ?? null,
+                'phone_number' => $data['phone_number'] ?? null,
+                'password' => Hash::make($data['password']),
+                'type_user_code' => $data['type_user_code'] ?? \App\Constants\UserTypes::PROVIDER,
+                'status_id' => UserStatus::ACTIVE,
+                'is_approved' => true,
+                'phone_verified_at' => now(),
+            ]);
+
+            $token = $this->issueAccessToken($user, $data['device_id'] ?? null);
+
+            Log::info('Direct user registered successfully without OTP', [
+                'user_id' => $user->id,
+                'phone' => $user->phone_number,
+                'type' => $user->type_user_code,
+            ]);
+
+            return [
+                'success' => true,
+                'message' => 'تم إنشاء الحساب وتفعيله بنجاح',
+                'data' => [
+                    'user' => $user->load(['status:id,status_code', 'userType']),
+                    'access_token' => $token,
+                    'token_type' => 'Bearer',
+                    'device_id' => $data['device_id'] ?? null,
+                ],
+            ];
+        } catch (\Exception $e) {
+            Log::error('Direct register failed: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'فشل إنشاء الحساب: ' . $e->getMessage(),
+                'code' => 500,
             ];
         }
     }

@@ -16,6 +16,7 @@ class UpdateCommissionRequest extends FormRequest
         return [
             'commission_type' => 'required|in:fixed,percentage',
             'calculation_level' => 'required|in:service,booking',
+            'currency_id' => 'nullable|exists:currencies,id',
             'description' => 'nullable|string|max:500',
             'value' => [
                 'nullable',
@@ -37,6 +38,7 @@ class UpdateCommissionRequest extends FormRequest
             'commission_type.in' => 'نوع العمولة يجب أن يكون ثابت أو نسبة مئوية',
             'calculation_level.required' => 'مستوى الحساب مطلوب',
             'calculation_level.in' => 'مستوى الحساب يجب أن يكون خدمة أو حجز',
+            'currency_id.exists' => 'العملة المحددة غير موجودة',
             'description.max' => 'الوصف يجب ألا يزيد عن 500 حرف',
             'value.numeric' => 'قيمة العمولة يجب أن تكون رقمًا',
             'value.min' => 'قيمة العمولة يجب أن تكون صفر أو أكثر',

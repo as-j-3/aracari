@@ -41,6 +41,7 @@ use Illuminate\Support\Facades\Route;
     // ==========================================
 // 1. Admin API Routes (مسارات الأدمن)
 // ==========================================
+
 Route::middleware(['auth:sanctum', 'verified', 'require.admin'])
     ->prefix('admin')
     ->group(function () {
@@ -51,6 +52,7 @@ Route::middleware(['auth:sanctum', 'verified', 'require.admin'])
             ->middleware('permission:settings:edit');
 
         // استدعاء ملفات المسارات المفرعة للوحة الإدارة
+        
         require __DIR__.'/web/admin/tax-rules.php';
         require __DIR__.'/web/admin/ads.php';
         require __DIR__.'/web/admin/admin.php';
@@ -77,10 +79,8 @@ Route::middleware(['auth:sanctum', 'verified', 'require.admin'])
         require __DIR__.'/web/admin/digital-pockets.php';
         require __DIR__.'/web/admin/currencies.php';
         require __DIR__.'/web/admin/city-stations.php';
-        require __DIR__.'/web/admin/files.php';
-        require __DIR__.'/web/admin/user.php';
 });
-
+/*
 // ==========================================
 // 2. Provider API Routes (مسارات مزودي الخدمة)
 // ==========================================
@@ -104,3 +104,4 @@ Route::fallback(function () {
         'message' => 'API endpoint not found',
     ], 404);
 });
+*/

@@ -31,7 +31,7 @@ class FileUploadController extends Controller
         $this->auditService = $auditService;
     }
 
-
+//عندما يقوم المزود باضافه ملف جديد
     public function uploadProviderFile(UploadProviderFileRequest $request): JsonResponse
     {
         $validated = $request->validated();

@@ -35,7 +35,7 @@ class AntiAbuse
     public function handle(Request $request, Closure $next): Response
     {
         // تجاوز الـ middleware كاملاً في بيئة التست لتجنب تعارض User-Agent
-        if (app()->environment('testing')) {
+        if (app()->environment('testing') || str_starts_with($request->path(), 'storage/')) {
             return $next($request);
         }
 

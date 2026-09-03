@@ -78,54 +78,76 @@ Route::controller(AuthController::class)->group(function () {
     });
 });
 
+// ==========================================
+// 1. مسارات تحتاج تسجيل دخول وتأكيد حساب عادي
+// ==========================================
+// تشترط أن يكون المستخدم مسجل دخوله (`auth`) وحسابه مفعل (`verified`)
 Route::middleware(['auth', 'verified'])->group(function () {
+    // استدعاء مسارات إدارة الملفات العامة
     require __DIR__.'/web/admin/files.php';
+    
+    // استدعاء مسارات إدارة بيانات وتفاصيل المستخدم
     require __DIR__.'/web/admin/user.php';
 });
 
+// ==========================================
+// 2. مسارات الحجوزات الخاصة بالعملاء
+// ==========================================
+// تشترط تسجيل الدخول، تأكيد الحساب، وتأكيد رقم الهاتف إضافياً (`phone.verified`)
 Route::middleware(['auth', 'verified', 'phone.verified'])->group(function () {
+    // استدعاء مسارات حجوزات المستخدم/العميل
     require __DIR__.'/web/user/bookings.php';
 });
 
+// ==========================================
+// 3. مسارات لوحة تحكم الإدارة (Admin Panel)
+// ==========================================
+// المجموعة العامة للإدارة: توحد البادئة إلى `/admin/` وأسماء المسارات إلى `admin.`
 Route::middleware(['auth', 'verified'])
-    ->prefix('admin')
-    ->name('admin.')
+    ->prefix('admin') // يضيف /admin قبل كل رابط (مثال: example.com/admin/settings)
+    ->name('admin.')  // يضيف admin. قبل اسم كل مسار (مثال: route('admin.settings'))
     ->group(function () {
 
+        // طبقة حماية إضافية: تشترط أن يكون المستخدم يملك صلاحية مدير نظام (`require.admin`)
         Route::middleware('require.admin')->group(function () {
+            
+            // عرض صفحة الإعدادات (يتطلب صلاحية عرض الإعدادات)
             Route::get('/settings', [SettingController::class, 'index'])
                 ->name('settings')
                 ->middleware('permission:settings:view');
+
+            // تحديث الإعدادات (يتطلب صلاحية تعديل الإعدادات)
             Route::post('/settings', [SettingController::class, 'update'])
                 ->name('settings.update')
                 ->middleware('permission:settings:edit');
                 
-            require __DIR__.'/web/admin/tax-rules.php';
-            require __DIR__.'/web/admin/ads.php';
-            require __DIR__.'/web/admin/admin.php';
-            require __DIR__.'/web/admin/lookups.php';
-            require __DIR__.'/web/admin/vehicles.php';
-            require __DIR__.'/web/admin/cities.php';
-            require __DIR__.'/web/admin/amenities.php';
-            require __DIR__.'/web/admin/coupons.php';
-            require __DIR__.'/web/admin/vehicle_types.php';
-            require __DIR__.'/web/admin/countries.php';
-            require __DIR__.'/web/admin/taxes.php';
-            require __DIR__.'/web/admin/trips.php';
-            require __DIR__.'/web/admin/bookings.php';
-            require __DIR__.'/web/admin/service_types.php';
-            require __DIR__.'/web/admin/provider_branches.php';
-            require __DIR__.'/web/admin/reports.php';
-            require __DIR__.'/web/admin/accounting.php';
-            require __DIR__.'/web/admin/roles.php';
-            require __DIR__.'/web/admin/services.php';
-            require __DIR__.'/web/admin/provider-services.php';
-            require __DIR__.'/web/admin/passengers.php';
-            require __DIR__.'/web/admin/exchange-rates.php';
-            require __DIR__.'/web/admin/receive-revenue.php';
-            require __DIR__.'/web/admin/digital-pockets.php';
-            require __DIR__.'/web/admin/currencies.php';
-            require __DIR__.'/web/admin/city-stations.php';
+            // --- استدعاء ملفات مسارات الإدارة المتخصصة ---
+            require __DIR__.'/web/admin/tax-rules.php';        // قواعد الضرائب
+            require __DIR__.'/web/admin/ads.php';              // الإعلانات
+            require __DIR__.'/web/admin/admin.php';            // إدارة المدراء
+            require __DIR__.'/web/admin/lookups.php';          // القوائم المرجعية/الثوابت
+            require __DIR__.'/web/admin/vehicles.php';         // المركبات
+            require __DIR__.'/web/admin/cities.php';           // المدن
+            require __DIR__.'/web/admin/amenities.php';        // الخدمات والوسائل المتاحة
+            require __DIR__.'/web/admin/coupons.php';          // كبونات الخصم
+            require __DIR__.'/web/admin/vehicle_types.php';    // أنواع المركبات
+            require __DIR__.'/web/admin/countries.php';        // الدول
+            require __DIR__.'/web/admin/taxes.php';            // الضرائب
+            require __DIR__.'/web/admin/trips.php';            // الرحلات
+            require __DIR__.'/web/admin/bookings.php';         // حجوزات الإدارة
+            require __DIR__.'/web/admin/service_types.php';    // أنواع الخدمات
+            require __DIR__.'/web/admin/provider_branches.php';// فروع مزودي الخدمات
+            require __DIR__.'/web/admin/reports.php';          // التقارير
+            require __DIR__.'/web/admin/accounting.php';       // المحاسبة والشجرة المالية
+            require __DIR__.'/web/admin/roles.php';            // الأدوار والصلاحيات (Spatie / Roles)
+            require __DIR__.'/web/admin/services.php';         // الخدمات
+            require __DIR__.'/web/admin/provider-services.php';// خدمات مزودي الخدمة
+            require __DIR__.'/web/admin/passengers.php';       // الركاب/العملاء
+            require __DIR__.'/web/admin/exchange-rates.php';   // أسعار الصرف
+            require __DIR__.'/web/admin/receive-revenue.php';  // توريد/استلام الإيرادات
+            require __DIR__.'/web/admin/digital-pockets.php';  // المحافظ الرقمية
+            require __DIR__.'/web/admin/currencies.php';       // العملات
+            require __DIR__.'/web/admin/city-stations.php';    // محطات المدن/الانطلاق
         });
     });
         Route::middleware(['require.provider','auth', 'verified'])->prefix('provider')->name('provider.')->group(function () {

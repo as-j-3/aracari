@@ -30,7 +30,7 @@ class UpdateProviderServiceRequest extends FormRequest
             'website' => 'nullable|url|max:255',
             'status' => 'required|in:active,inactive,pending',
             'commission_type' => 'required|in:service,booking',
-            'cr_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+    
         ];
     }
 
@@ -51,10 +51,7 @@ class UpdateProviderServiceRequest extends FormRequest
             'commission_type.in' => 'نوع العمولة يجب أن يكون service أو booking',
             'brand_photo.image' => 'صورة العلامة التجارية يجب أن تكون ملف صورة',
             'brand_photo.mimes' => 'صورة العلامة التجارية يجب أن تكون من نوع jpeg أو png أو jpg أو webp',
-            'brand_photo.max' => 'صورة العلامة التجارية يجب أن لا تزيد عن 2 ميجابايت',
-            'cr_document.file' => 'وثيقة السجل التجاري يجب أن تكون ملفاً',
-            'cr_document.mimes' => 'وثيقة السجل التجاري يجب أن تكون من نوع pdf أو jpg أو jpeg أو png', 
-            'cr_document.max' => 'وثيقة السجل التجاري يجب أن لا تزيد عن 2 ميجابايت',
+            'brand_photo.max' => 'صورة العلامة التجارية يجب ألا تزيد عن 2 ميجابايت',
         ];
     }
 }

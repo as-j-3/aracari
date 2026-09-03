@@ -12,7 +12,8 @@ use App\Http\Controllers\Admin\ProviderSettlementController;
 use App\Http\Controllers\Admin\SecurityIncidentController;
 
 
-Route::middleware(['auth', 'verified'])->group(function () {
+
+Route::middleware(['auth:sanctum', 'verified'])->group(function () {
     
     // ==================== Dashboard ====================
     Route::get('/dashboard', [DashboardController::class, 'index'])
@@ -100,7 +101,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         
         Route::middleware('throttle:30,1')->group(function () {
             Route::get('/', 'index')->name('index')->middleware('permission:commissions:view');
-            Route::get('/create', 'create')->name('create')->middleware('permission:commissions:create');
+            Route::get('/providers', 'providers')->name('providers')->middleware('permission:commissions:create');
+            Route::get('/currencies', 'currencies')->name('currencies')->middleware('permission:commissions:create');
             Route::get('/export', 'export')->name('export')->middleware('permission:commissions:view');
             Route::get('/{commission:uuid}', 'show')->name('show')->middleware('permission:commissions:view');
             Route::get('/{commission:uuid}/edit', 'edit')->name('edit')->middleware('permission:commissions:edit');
@@ -108,7 +110,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         
         Route::middleware('throttle:10,1')->group(function () {
             Route::post('/', 'store')->name('store')->middleware('permission:commissions:create');
-            Route::put('/{commission:uuid}', 'update')->name('update')->middleware('permission:commissions:edit');
+            Route::match(['PUT', 'post'], '/{commission:uuid}', 'update')->name('update')->middleware('permission:commissions:edit');
             Route::delete('/{commission:uuid}', 'destroy')->name('destroy')->middleware('permission:commissions:delete');
         });
     });

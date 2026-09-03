@@ -1179,10 +1179,10 @@ class BookingService
      * @param string $tripUuid رمز الرحلة
      * @param array $seatIds المقاعد المراد مسكها
      * @param int $userId معرف المستخدم
-     * @param int $durationMinutes مدة المسك بالدقائق (افتراضياً 5 دقائق)
+     * @param int $durationMinutes مدة المسك بالدقائق (افتراضياً 2 دقائق)
      * @return array نتيجة العملية
      */
-    public function holdSeats(string $tripUuid, array $seatIds, int $userId, int $durationMinutes = 5): array
+    public function holdSeats(string $tripUuid, array $seatIds, int $userId, int $durationMinutes = 2): array
     {
         $trip = $this->tripRepository->findByUuid($tripUuid);
         if (!$trip) {

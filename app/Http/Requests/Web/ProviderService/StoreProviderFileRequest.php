@@ -18,6 +18,7 @@ class StoreProviderFileRequest extends FormRequest
             'file'      => ['required', 'file', 'max:10240'],
             'file_type' => ['required', 'string', 'in:document,image'],
             'name'      => ['required', 'string', 'in:' . implode(',', array_keys(ProviderFileTypes::all()))],
+            'note'      => ['nullable', 'string'],
         ];
     }
 
@@ -31,6 +32,8 @@ class StoreProviderFileRequest extends FormRequest
             'file_type.in'       => 'نوع الملف يجب أن يكون document أو image.',
             'name.required'      => 'اسم نوع الملف مطلوب.',
             'name.in'            => 'اسم نوع الملف غير صالح.',
+            'note.nullable'      => 'ملاحظات الملف غير صالحة.',
+            'note.string'        => 'ملاحظات الملف يجب أن تكون نصية.',
         ];
     }
 }

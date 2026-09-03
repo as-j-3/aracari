@@ -12,25 +12,28 @@ class CreateProviderServiceRequest extends FormRequest
     {
         return $this->user() && $this->user()->hasPermission('providers:create');
     }
-
-    public function rules(): array
-    {
-        return [
-            'user_id'            => 'required|exists:users,id',
-            'type_of_service_id' => 'required|exists:type_of_services,id',
-            'name'              => 'required|string|max:255',
-            'description'       => 'nullable|string',
-            'cr_number'         => 'required|string|max:100|unique:provider_services,cr_number',
-            'brand_photo'       => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
-            'born_country'      => 'nullable|string|max:100',
-            'contact_phone'     => 'nullable|string|max:20',
-            'contact_email'     => 'nullable|email|max:255',
-            'website'           => 'nullable|url|max:255',
-            'status'            => 'required|in:active,inactive,pending',
-            'commission_type'   => 'required|in:service,booking',
-            'cr_document'       => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
-        ];
-    }
+public function rules(): array
+{
+    return [
+        'user_id'            => 'required|exists:users,id',
+        'type_of_service_id' => 'required|exists:type_of_services,id',
+        'name'               => 'required|string|max:255',
+        'description'        => 'nullable|string',
+        'cr_number'          => 'required|string|max:100|unique:provider_services,cr_number',
+        'brand_photo'        => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
+        'born_country'       => 'nullable|string|max:100',
+        'contact_phone'      => 'nullable|string|max:20',
+        'contact_email'      => 'nullable|email|max:255',
+        'website'            => 'nullable|url|max:255',
+        'status'             => 'required|in:active,inactive,pending',
+        'commission_type'    => 'required|in:service,booking',
+        
+        // طريقة الدفع
+        'digital_pocket_id'  => 'required|exists:digital_pockets,id',
+        'account_number'     => 'required|string|max:100',
+        'account_name'       => 'required|string|max:255',
+    ];
+}
 
     public function withValidator($validator): void
     {
