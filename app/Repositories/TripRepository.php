@@ -80,35 +80,74 @@ class TripRepository implements TripRepositoryInterface
             $query->where('is_public', true);
         }
 
-        if (!empty($filters['from_city'])) {
-            $query->where('departure_city', $filters['from_city']);
+        // Search by keyword (trip UUID, departure/destination city name, pickup location, station names, provider name, vehicle plate/name/model)
+        if (!empty($filters['search'])) {
+            $escaped = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $filters['search']);
+            $query->where(function ($q) use ($escaped) {
+                $q->where('trips.uuid', 'like', "%{$escaped}%")
+                  ->orWhere('trips.pickup_location', 'like', "%{$escaped}%")
+                  ->orWhereHas('departureCity', function ($cq) use ($escaped) {
+                      $cq->where('name', 'like', "%{$escaped}%");
+                  })
+                  ->orWhereHas('destinationCity', function ($cq) use ($escaped) {
+                      $cq->where('name', 'like', "%{$escaped}%");
+                  })
+                  ->orWhereHas('departureStation', function ($sq) use ($escaped) {
+                      $sq->where('name', 'like', "%{$escaped}%");
+                  })
+                  ->orWhereHas('arrivalStation', function ($sq) use ($escaped) {
+                      $sq->where('name', 'like', "%{$escaped}%");
+                  })
+                  ->orWhereHas('user', function ($uq) use ($escaped) {
+                      $uq->where('name', 'like', "%{$escaped}%")
+                         ->orWhereHas('providerService', function ($psq) use ($escaped) {
+                             $psq->where('name', 'like', "%{$escaped}%");
+                         });
+                  })
+                  ->orWhereHas('vehicle', function ($vq) use ($escaped) {
+                      $vq->where('name', 'like', "%{$escaped}%")
+                         ->orWhere('model', 'like', "%{$escaped}%");
+                  });
+            });
         }
 
-        if (!empty($filters['to_city'])) {
-            $query->where('destination_city', $filters['to_city']);
+        // Filter by status (ID or code/name)
+        if (!empty($filters['status'])) {
+            if (is_numeric($filters['status'])) {
+                $query->where('trip_status_id', $filters['status']);
+            } else {
+                $query->whereHas('tripStatus', function ($sq) use ($filters) {
+                    $sq->where('status_code', $filters['status'])
+                       ->orWhere('status_name', $filters['status']);
+                });
+            }
         }
 
-        if (!empty($filters['departure_date'])) {
-            $query->whereDate('departure_time', $filters['departure_date']);
+        // Filter by city (matches departure or destination by ID or Name)
+        if (!empty($filters['city'])) {
+            if (is_numeric($filters['city'])) {
+                $query->where(function ($q) use ($filters) {
+                    $q->where('departure_city', $filters['city'])
+                      ->orWhere('destination_city', $filters['city']);
+                });
+            } else {
+                $cityName = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $filters['city']);
+                $query->where(function ($q) use ($cityName) {
+                    $q->whereHas('departureCity', function ($cq) use ($cityName) {
+                        $cq->where('name', 'like', "%{$cityName}%");
+                    })->orWhereHas('destinationCity', function ($cq) use ($cityName) {
+                        $cq->where('name', 'like', "%{$cityName}%");
+                    });
+                });
+            }
         }
 
-        if (!empty($filters['min_price'])) {
-            $query->where('price_for_adult', '>=', $filters['min_price']);
+        // Filter by departure date
+        if (!empty($filters['date'])) {
+            $query->whereDate('departure_time', $filters['date']);
         }
 
-        if (!empty($filters['max_price'])) {
-            $query->where('price_for_adult', '<=', $filters['max_price']);
-        }
-
-        if (!empty($filters['type_of_trip_id'])) {
-            $query->where('type_of_trip_id', $filters['type_of_trip_id']);
-        }
-
-        if (!empty($filters['level_trip_id'])) {
-            $query->where('level_trip_id', $filters['level_trip_id']);
-        }
-
-        return $query->orderBy('departure_time')->paginate($perPage);
+        return $query->orderBy('departure_time', 'desc')->paginate($perPage);
     }
 
     public function getByUser(int $userId, int $perPage = NumericConstants::DEFAULT_PER_PAGE): LengthAwarePaginator

@@ -13,7 +13,9 @@ class UpdateVehicleTypeRequest extends FormRequest
 
     public function rules(): array
     {
-        $vehicleTypeId = $this->route('vehicle_type')?->id ?? $this->route('id');
+        $vehicleType = $this->route('vehicleType') ?? $this->route('vehicle_type');
+        $vehicleTypeId = is_object($vehicleType) ? $vehicleType->id : ($vehicleType ?? $this->route('id'));
+
         return [
             'type_name' => 'sometimes|string|max:100|unique:vehicle_types,type_name,' . $vehicleTypeId,
         ];

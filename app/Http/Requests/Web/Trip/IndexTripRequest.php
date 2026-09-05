@@ -16,9 +16,9 @@ class IndexTripRequest extends FormRequest
         return [
             'search'   => ['nullable', 'string', 'max:100'],
             'status'   => ['nullable', 'string'],
-            'city'     => ['nullable', 'integer', 'exists:cities,id'],
+            'city'     => ['nullable'],
             'date'     => ['nullable', 'date'],
-            'per_page' => ['nullable', 'integer', 'min:5', 'max:100'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ];
     }
 }

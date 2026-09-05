@@ -4,8 +4,8 @@ namespace App\Constants;
 
 class BookingStatus
 {
-    const CONFIRMED = 1;
-    const PENDING = 2;
+    const CONFIRMED = 2;
+    const PENDING = 1;
     const CANCELLED = 3;
     const COMPLETED = 4;
     const CANCELLED_BY_USER = 5;

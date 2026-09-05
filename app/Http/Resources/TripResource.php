@@ -14,16 +14,17 @@ class TripResource extends JsonResource
 
         $totalSeats = $this->vehicle?->seats()->count() ?? 0;
         $availableSeats = $this->available_seats ?? ($totalSeats - count($this->getBookedSeatIds()));
+
         return [
             'uuid' => $this->uuid,
             'image' => $this->image_url,
             'provider' => $this->when($this->user, function () {
-            return [
-                'uuid' => $this->user->uuid,
-                'name' => $this->user->name,
-                'logo' => $this->user->providerService?->brand_photo_url,
-            ];
-        }),
+                return [
+                    'uuid' => $this->user->uuid,
+                    'name' => $this->user->name,
+                    'logo' => $this->user->providerService?->brand_photo_url,
+                ];
+            }),
             'available_seats' => $availableSeats,
             'total_seats' => $totalSeats,
             'is_public' => $this->is_public,
@@ -61,6 +62,17 @@ class TripResource extends JsonResource
             'price_for_adult' => number_format((float) $this->price_for_adult, 2, '.', ''),
             'price_for_child' => number_format((float) $this->price_for_child, 2, '.', ''),
             'discount_percentage' => number_format((float) $this->discount_percentage, 2, '.', ''),
+
+            // 🟢 إرجاع العملة هنا على مستوى الرحلة مباشرةً
+            'currency' => $this->whenLoaded('currency', function () {
+                return [
+                    'id'     => $this->currency->id,
+                    'name'   => $this->currency->name,  
+                    'symbol' => $this->currency->symbol, 
+                    'code'   => $this->currency->code,  
+                ];
+            }),
+
             'conditions' => $this->conditions,
             'policies' => $this->policies->map(function ($policy) {
                 return [

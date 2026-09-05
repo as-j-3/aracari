@@ -23,6 +23,14 @@ class VehicleResource extends JsonResource
             'seats_count' => $this->seats_count,
             'status' => $this->status,
             'vehicle_type' => $this->vehicleType?->type_name,
+            'provider' => $this->whenLoaded('user', function () {
+                return [
+                    'id' => $this->user?->id,
+                    'uuid' => $this->user?->uuid,
+                    'name' => $this->user?->name,
+                    'email' => $this->user?->email,
+                ];
+            }),
             'created_at' => $this->created_at?->format('Y-m-d H:i:s'),
         ];
     }

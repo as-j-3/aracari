@@ -11,6 +11,7 @@ return new class extends Migration
         Schema::create('payment_methods', function (Blueprint $table) {
             $table->id();
             $table->string('method_name', 100);
+            //غلط غلط غلط
             $table->foreignId('provider_id')->nullable()->constrained('provider_services')->onDelete('cascade');
             $table->foreignId('country_id')->nullable()->constrained('countries')->onDelete('cascade');
             $table->foreignId('currency_id')->nullable()->constrained('currencies')->onDelete('set null');

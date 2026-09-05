@@ -2,6 +2,8 @@
 
 namespace App\Constants;
 
+use App\Models\Account;
+
 final class AccountCodes
 {
     private function __construct() {}
@@ -17,9 +19,18 @@ final class AccountCodes
     const PROVIDER_REVENUE   = '4001'; 
     const PLATFORM_COMMISSION = '4002';
 
-    public static function providerAccount(int $userId): string
+     public static function providerAccount(): string
     {
-        return self::LIABILITIES . '_' . $userId;
+        $lastCode = Account::where('account_code', 'like', '2200%')
+            ->whereRaw('LENGTH(account_code) = 6')
+            ->orderByDesc('account_code')
+            ->value('account_code');
+
+        if (! $lastCode) {
+            return '220001';
+        }
+
+        return (string) ((int) $lastCode + 1);
     }
     public static function getAccountType(string $code): ?string
     {
