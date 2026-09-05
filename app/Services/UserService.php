@@ -156,18 +156,16 @@ class UserService
                 unset($data['type_user_code'], $data['is_approved'], $data['status_id']);
             }
             
-            if (isset($data['status_id'])) {
-                $data['is_approved'] = ($data['status_id'] == UserStatus::ACTIVE);
+            if (array_key_exists('is_approved', $data)) {
+                $data['is_approved'] = filter_var($data['is_approved'], FILTER_VALIDATE_BOOLEAN);
+            } elseif (isset($data['status_id'])) {
+                $data['is_approved'] = ((int)$data['status_id'] === UserStatus::ACTIVE);
             }
 
             if (isset($data['password']) && $data['password'] !== '') {
                 $data['password'] = Hash::make($data['password']);
             } else {
                 unset($data['password']);
-            }
-            
-            if (!isset($data['is_approved'])) {
-                unset($data['is_approved']);
             }
             
             $oldValues = $this->filterSensitiveData($user, $user->getAttributes());

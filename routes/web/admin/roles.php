@@ -14,7 +14,7 @@ Route::prefix('roles')->name('roles.')->group(function () {
     
     Route::middleware('throttle:10,1')->group(function () {
         Route::post('/', [RoleController::class, 'store'])->middleware('permission:roles:create')->name('store');
-        Route::put('/{role}', [RoleController::class, 'update'])->middleware('permission:roles:edit')->name('update');
+        Route::match(['PUT', 'post'], '/{role}', [RoleController::class, 'update'])->middleware('permission:roles:edit')->name('update');
         Route::delete('/{role}', [RoleController::class, 'destroy'])->middleware('permission:roles:delete')->name('destroy');
         Route::post('/{role}/permissions', [RoleController::class, 'assignPermissions'])->middleware('permission:permissions:assign')->name('assign-permissions');
     });

@@ -25,6 +25,8 @@ Route::middleware(['auth:sanctum', 'verified'])->group(function () {
         
         Route::middleware('throttle:30,1')->group(function () {
             Route::get('/', 'index')->name('index')->middleware('permission:users:view');
+            Route::get('/search', 'search')->name('search')->middleware('permission:users:view');
+            Route::get('/statistics', 'statistics')->name('statistics');
             Route::get('/create', 'create')->name('create')->middleware('permission:users:create');
             Route::get('/{uuid}', 'show')->name('show')->middleware('permission:users:view');
             Route::get('/{uuid}/edit', 'edit')->name('edit')->middleware('permission:users:edit');
@@ -32,11 +34,11 @@ Route::middleware(['auth:sanctum', 'verified'])->group(function () {
         
         Route::middleware('throttle:10,1')->group(function () {
             Route::post('/', 'store')->name('store')->middleware('permission:users:create');
-            Route::put('/{uuid}', 'update')->name('update')->middleware('permission:users:edit');
+            Route::match(['put', 'post'], '/{uuid}', 'update')->name('update')->middleware('permission:users:edit');
             Route::delete('/{uuid}', 'destroy')->name('destroy')->middleware('permission:users:delete');
             Route::post('/{uuid}/approve', 'approve')->name('approve')->middleware('permission:users:approve');
             Route::post('/{uuid}/restore', 'restore')->name('restore')->middleware('permission:users:delete');
-            Route::post('/{uuid}/verify-phone', [UserController::class, 'verifyPhone'])->name('verify-phone');
+            Route::post('/{uuid}/verify-phone', 'verifyPhone')->name('verify-phone');
         });
     });
 
