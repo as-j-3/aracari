@@ -21,9 +21,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
         ->name('api.taxes.calculate')
         ->middleware('throttle:20,1');
     
-    Route::post('/{uuid}/hold-seats', [BookingController::class, 'holdSeats'])
-        ->name('api.trips.hold-seats')
-        ->middleware(['throttle:20,1']);
 
     Route::post('/{uuid}/book', [BookingController::class, 'store'])
         ->name('api.trips.book')

@@ -40,6 +40,11 @@ use Illuminate\Support\Facades\Route;
     Route::middleware('auth:sanctum')->prefix('currency')->group(function () {
         require __DIR__.'/api/currency.php';
     });
+
+    
+    Route::middleware('auth:sanctum')->prefix('payment')->group(function () {
+        require __DIR__.'/api/Payment.php';
+    });
     // ==========================================
 // 1. Admin API Routes (مسارات الأدمن)
 // ==========================================
@@ -83,6 +88,7 @@ Route::middleware(['auth:sanctum', 'verified', 'require.admin'])
         require __DIR__.'/web/admin/city-stations.php';
         require __DIR__.'/web/admin/commission-tax.php';
         require __DIR__.'/web/admin/provider-tax.php';
+        require __DIR__.'/web/admin/bank-transfers.php';
         
 });
 /*

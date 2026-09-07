@@ -58,7 +58,7 @@ class BookingService
         private ExchangeRateService $exchangeRateService,
         private NotificationService $notificationService,
         private BookingRepositoryInterface $bookingRepository,
-        private TransactionRepositoryInterface $transactionRepository,
+        public TransactionRepositoryInterface $transactionRepository,
         private PassengerRepositoryInterface $passengerRepository,
         private TicketRepositoryInterface $ticketRepository,
         private WalletService $walletService,
@@ -176,7 +176,7 @@ class BookingService
             return $this->error('سعر الصرف غير متاح للعملة المختارة');
         }
 
-        $baseAmount = $finalBookingAmount;
+        $baseAmount = $financialCalculation['base_amount'];
         $paymentAmount = round($finalBookingAmount * $exchangeRate, 2);
 
         // Branch & Commission
@@ -317,14 +317,9 @@ class BookingService
 
             return [
                 'success' => true,
-                'message' => "تم حجز المقاعد مؤقتاً بنجاح لمدة {$durationMinutes} دقائق",
+                'message' => "تمت اضافه المسافرين بنجاح ",
                 'data' => [
                     'booking_uuid' => $bookingRecord->uuid,
-                    'reserved_until' => $reservedUntil->toIso8601String(),
-                    'remaining_seconds' => $durationMinutes * 60,
-                    'total_amount' => $paymentAmount,
-                    'currency_id' => $paymentCurrencyId,
-                    'held_seats' => $heldSeatsSummary,
                     'passengers' => $passengersSummary,
                 ],
             ];
@@ -464,7 +459,7 @@ class BookingService
 
                 'currency_id' => $booking->currency_id,
 
-                'currency_name' => $booking->currency?->currency_name,
+                'currency_name' => $booking->currency?->name,
 
                 'currency_symbol' => $booking->currency?->symbol,
 

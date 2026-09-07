@@ -2,11 +2,11 @@
 
 namespace App\Models;
 
+use App\Models\PaymentMethod as PaymentMethodModel;
 use App\Traits\BelongsToProvider;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\Booking;
-use App\Models\PaymentMethod as PaymentMethodModel;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
 
 class BookingPayment extends Model
@@ -56,8 +56,8 @@ class BookingPayment extends Model
 
     /**
      * Relationship: BookingPayment belongs to a payment method
-     * 
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     *
+     * @return BelongsTo
      */
     public function paymentMethod()
     {
@@ -66,8 +66,8 @@ class BookingPayment extends Model
 
     /**
      * Relationship: BookingPayment belongs to a user
-     * 
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     *
+     * @return BelongsTo
      */
     public function user()
     {
@@ -76,8 +76,8 @@ class BookingPayment extends Model
 
     /**
      * Relationship: BookingPayment belongs to a booking
-     * 
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     *
+     * @return BelongsTo
      */
     public function booking()
     {
@@ -86,11 +86,19 @@ class BookingPayment extends Model
 
     /**
      * Relationship: BookingPayment belongs to a currency
-     * 
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
+     *
+     * @return BelongsTo
      */
     public function currency()
     {
         return $this->belongsTo(Currency::class);
+    }
+
+    public function userDirectPaymentInfo()
+    {
+        return $this->hasOne(
+            UserDirectPaymentInfo::class,
+            'booking_payment_id'
+        );
     }
 }

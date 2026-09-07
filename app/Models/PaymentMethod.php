@@ -61,4 +61,11 @@ class PaymentMethod extends Model
     {
         return $this->hasMany(CommissionPaymentMethod::class);
     }
+    public function directTransferPayments()
+{
+    return $this->hasMany(
+        DirectTransferPayment::class,
+        'payment_method_id'
+    );
+}
 }

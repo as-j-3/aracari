@@ -27,7 +27,7 @@ class InitiateBookingDTO
             departureDate: $data['departure_date'] ?? null,
             couponCode: $data['coupon_code'] ?? null,
             currencyId: isset($data['currency_id']) ? (int) $data['currency_id'] : null,
-            holdDurationMinutes: 5
+            holdDurationMinutes: 10
         );
     }
 }
