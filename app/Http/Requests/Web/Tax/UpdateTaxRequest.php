@@ -15,9 +15,7 @@ class UpdateTaxRequest extends FormRequest
     {
         return [
             'name' => 'sometimes|string|max:255',
-            'type' => 'sometimes|in:fixed,percentage',
-            'rate'   => ['sometimes', 'required_if:type,percentage', 'nullable', 'numeric', 'min:0', 'max:100'],
-            'amount' => ['sometimes', 'required_if:type,fixed', 'nullable', 'numeric', 'min:0'],
+            'is_visible_for_customer' => 'sometimes|boolean',
         ];
     }
 
@@ -26,14 +24,7 @@ class UpdateTaxRequest extends FormRequest
         return [
             'name.string'        => 'اسم الضريبة يجب أن يكون نصاً',
             'name.max'           => 'اسم الضريبة يجب ألا يتجاوز 255 حرفاً',
-            'type.in'            => 'نوع الضريبة غير صالح',
-            'rate.required_if'   => 'نسبة الضريبة مطلوبة',
-            'rate.numeric'       => 'نسبة الضريبة يجب أن تكون رقماً',
-            'rate.min'           => 'نسبة الضريبة لا يمكن أن تكون أقل من 0',
-            'rate.max'           => 'نسبة الضريبة لا يمكن أن تتجاوز 100%',
-            'amount.required_if' => 'قيمة الضريبة مطلوبة',
-            'amount.numeric'     => 'قيمة الضريبة يجب أن تكون رقماً',
-            'amount.min'         => 'قيمة الضريبة لا يمكن أن تكون أقل من 0',
+            'is_visible_for_customer.boolean' => 'الحالة يجب أن تكون قيمة منطقية',
         ];
     }
 }

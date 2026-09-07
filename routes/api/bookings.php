@@ -17,6 +17,22 @@ Route::middleware(['auth:sanctum'])->group(function () {
         ->name('api.bookings.round-trip')
         ->middleware('throttle:10,1');
 
+    // المرحلة الأولى: استقبال بيانات الركاب وقفل المقاعد مؤقتاً (Hold لمدة دقيقتين)
+    Route::post('/{tripUuid}/initiate', [BookingController::class, 'initiateBooking'])
+        ->name('api.bookings.initiate')
+        ->middleware('throttle:15,1');
+
+    // المرحلة الثانية: رابط الدفع وعرض مؤقت الهولد وطرق الدفع وملخص الحساب
+    Route::get('/{uuid}/checkout', [BookingController::class, 'checkout'])
+        ->name('api.bookings.checkout')
+        ->middleware('throttle:30,1');
+
+    // المرحلة الثالثة: تأكيد وسيلة الدفع وتثبيت الحجز وإصدار التذاكر
+    Route::post('/{uuid}/confirm-payment', [BookingController::class, 'confirmPayment'])
+        ->name('api.bookings.confirm-payment')
+        ->middleware('throttle:10,1');
+
+    // [الكود السابق محفوظ] - الحجز المباشر دفعة واحدة (Legacy Flow)
     Route::post('/{tripUuid}', [BookingController::class, 'store'])
         ->name('api.bookings.store')
         ->middleware('throttle:10,1');

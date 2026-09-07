@@ -15,9 +15,7 @@ class StoreTaxRequest extends FormRequest
     {
         return [
             'name' => 'required|string|max:255',
-            'type' => 'required|in:fixed,percentage',
-            'rate'   => ['required_if:type,percentage', 'nullable', 'numeric', 'min:0', 'max:100'],
-            'amount' => ['required_if:type,fixed', 'nullable', 'numeric', 'min:0'],
+            'is_visible_for_customer' => 'boolean',
         ];
     }
 
@@ -27,15 +25,7 @@ class StoreTaxRequest extends FormRequest
             'name.required'      => 'اسم الضريبة أو الرسم مطلوب',
             'name.string'        => 'اسم الضريبة يجب أن يكون نصاً',
             'name.max'           => 'اسم الضريبة يجب ألا يتجاوز 255 حرفاً',
-            'type.required'      => 'نوع الضريبة مطلوب',
-            'type.in'            => 'نوع الضريبة غير صالح (ثابت أو نسبة مئوية)',
-            'rate.required_if'   => 'نسبة الضريبة مطلوبة عندما يكون النوع نسبة مئوية',
-            'rate.numeric'       => 'نسبة الضريبة يجب أن تكون رقماً',
-            'rate.min'           => 'نسبة الضريبة لا يمكن أن تكون أقل من 0',
-            'rate.max'           => 'نسبة الضريبة لا يمكن أن تتجاوز 100%',
-            'amount.required_if' => 'قيمة الضريبة مطلوبة عندما يكون النوع مبلغاً ثابتاً',
-            'amount.numeric'     => 'قيمة الضريبة يجب أن تكون رقماً',
-            'amount.min'         => 'قيمة الضريبة لا يمكن أن تكون أقل من 0',
+            'is_visible_for_customer.boolean' => 'هل الضريبة ظاهرة للعميل يجب أن يكون قيمة صحيحة',
         ];
     }
 }

@@ -9,11 +9,13 @@ use Illuminate\Support\Facades\Route;
     Route::prefix('trips')->group(function () {
         require __DIR__.'/api/trips.php';
     });
-
-    Route::middleware(['auth:sanctum', 'phone.verified'])->prefix('bookings')->group(function () {
+//الرجول له لاحقا 
+    /*Route::middleware(['auth:sanctum', 'phone.verified'])->prefix('bookings')->group(function () {
+        require __DIR__.'/api/bookings.php';
+    });*/
+  Route::middleware(['auth:sanctum'])->prefix('bookings')->group(function () {
         require __DIR__.'/api/bookings.php';
     });
-
     Route::prefix('ads')->group(function () {
         require __DIR__.'/api/ads.php';
     });
@@ -53,7 +55,7 @@ Route::middleware(['auth:sanctum', 'verified', 'require.admin'])
 
         // استدعاء ملفات المسارات المفرعة للوحة الإدارة
         
-        require __DIR__.'/web/admin/tax-rules.php';
+        require __DIR__.'/web/admin/country-tax.php';
         require __DIR__.'/web/admin/ads.php';
         require __DIR__.'/web/admin/admin.php';
         require __DIR__.'/web/admin/lookups.php';
@@ -79,6 +81,9 @@ Route::middleware(['auth:sanctum', 'verified', 'require.admin'])
         require __DIR__.'/web/admin/digital-pockets.php';
         require __DIR__.'/web/admin/currencies.php';
         require __DIR__.'/web/admin/city-stations.php';
+        require __DIR__.'/web/admin/commission-tax.php';
+        require __DIR__.'/web/admin/provider-tax.php';
+        
 });
 /*
 // ==========================================

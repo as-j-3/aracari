@@ -18,7 +18,7 @@ Route::prefix('lookups')->name('lookups.')->group(function () {
         
         Route::middleware('throttle:10,1')->group(function () {
             Route::post('/', 'store')->name('store')->middleware('permission:trip-types:create');
-            Route::put('/{id}', 'update')->name('update')->middleware('permission:trip-types:edit'); 
+            Route::match(['put', 'post'], '/{id}', 'update')->name('update')->middleware('permission:trip-types:edit'); 
             Route::delete('/{id}', 'destroy')->name('destroy')->middleware('permission:trip-types:delete');  
         });
     });
@@ -33,7 +33,7 @@ Route::prefix('lookups')->name('lookups.')->group(function () {
         
         Route::middleware('throttle:10,1')->group(function () {
             Route::post('/', 'store')->name('store')->middleware('permission:trip-levels:create');
-            Route::put('/{id}', 'update')->name('update')->middleware('permission:trip-levels:edit');
+            Route::match(['put', 'post'], '/{id}', 'update')->name('update')->middleware('permission:trip-levels:edit');
             Route::delete('/{id}', 'destroy')->name('destroy')->middleware('permission:trip-levels:delete');
         });
     });

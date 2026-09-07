@@ -122,7 +122,7 @@ Route::middleware(['auth', 'verified'])
                 ->middleware('permission:settings:edit');
                 
             // --- استدعاء ملفات مسارات الإدارة المتخصصة ---
-            require __DIR__.'/web/admin/tax-rules.php';        // قواعد الضرائب
+           // require __DIR__.'/web/admin/tax-rules.php';        // قواعد الضرائب
             require __DIR__.'/web/admin/ads.php';              // الإعلانات
             require __DIR__.'/web/admin/admin.php';            // إدارة المدراء
             require __DIR__.'/web/admin/lookups.php';          // القوائم المرجعية/الثوابت

@@ -13,17 +13,12 @@ class Tax extends Model
     protected $fillable = [
         'uuid',
         'name',
-        'type',
-        'rate',
-        'amount',
-        'currency_id',
-        'created_by',
+        "is_visible_for_customer",
     ];
 
     protected $casts = [
         'uuid' => 'string',
-        'rate' => 'decimal:2',
-        'amount' => 'decimal:2',
+        'is_visible_for_customer' => 'boolean',
     ];
 
     /**
@@ -57,5 +52,13 @@ class Tax extends Model
     public function currency()
     {
         return $this->belongsTo(Currency::class);
+    }
+    public function scopeVisibleForCustomer($query)
+    {
+        return $query->where('is_visible_for_customer', true);
+    }
+    public function countryTaxes()
+    {
+        return $this->hasMany(CountryTax::class, 'tax_id');
     }
 }

@@ -9,15 +9,19 @@ use App\Models\City;
 use App\Models\Country;
 use App\Services\AuditService;
 use App\Services\FileUploadService;
-use Illuminate\View\View;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log; 
+use Illuminate\Support\Facades\Log;
+use Illuminate\View\View;
+use Illuminate\Http\JsonResponse;
+
 
 class CityController extends Controller
 {
     protected AuditService $auditService;
+
     protected FileUploadService $fileUploadService;
 
     public function __construct(AuditService $auditService, FileUploadService $fileUploadService)
@@ -27,6 +31,274 @@ class CityController extends Controller
         $this->middleware('require.admin');
     }
 
+    public function index(Request $request): JsonResponse
+    {
+        $query = City::query()
+            ->with('country');
+
+        if ($search = $request->get('search')) {
+            $escaped = str_replace(
+                ['\\', '%', '_'],
+                ['\\\\', '\\%', '\\_'],
+                $search
+            );
+
+            $query->where(function (Builder $q) use ($escaped) {
+                $q->where('name', 'like', "%{$escaped}%");
+            });
+        }
+
+
+        $cities = $query
+            ->latest('created_at')
+            ->paginate($request->get('per_page', 15))
+            ->withQueryString();
+
+        return $this->success(
+            $cities,
+            'تم استرجاع المدن بنجاح'
+        );
+    }
+
+    /**
+     * إضافة مدينة
+     */
+    public function store(StoreCityRequest $request): JsonResponse
+    {
+        try {
+            $data = $request->validated();
+
+            DB::beginTransaction();
+
+            $city = City::create($data);
+
+
+            if ($request->hasFile('image')) {
+                $result = $this->fileUploadService->uploadImage(
+                    $request->file('image'),
+                    'cities/'.$city->id
+                );
+
+                if ($result['success']) {
+                    $city->update([
+                        'image' => $result['file_path'],
+                    ]);
+                }
+            }
+
+            $cityId = $city->id;
+            $cityData = $city->fresh()
+                ->load('country')
+                ->toArray();
+
+            DB::commit();
+
+
+            $this->auditService->log(
+                auth()->id(),
+                'create',
+                'cities',
+                $cityId,
+                null,
+                $cityData
+            );
+
+            return $this->success(
+                $city->fresh()->load('country'),
+                'تم إضافة المدينة بنجاح'
+            );
+
+        } catch (\Exception $e) {
+
+            DB::rollBack();
+
+            Log::error('City store failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return $this->error(
+                'حدث خطأ أثناء إضافة المدينة. يرجى المحاولة مرة أخرى.',
+                null,
+                422
+            );
+        }
+    }
+
+    /**
+     * تعديل مدينة
+     */
+    public function update(
+        UpdateCityRequest $request,
+        City $city
+    ): JsonResponse {
+        try {
+            $oldData = $city->toArray();
+            $data = $request->validated();
+            $oldImage = $city->image;
+
+            DB::beginTransaction();
+
+            /*
+            |--------------------------------------------------------------------------
+            | رفع الصورة الجديدة
+            |--------------------------------------------------------------------------
+            */
+
+            if ($request->hasFile('image')) {
+                $result = $this->fileUploadService->uploadImage(
+                    $request->file('image'),
+                    'cities/'.$city->id
+                );
+
+                if ($result['success']) {
+                    $data['image'] = $result['file_path'];
+                }
+            }
+
+            $city->update($data);
+
+            $newData = $city->fresh()->toArray();
+
+            $changes = array_diff_assoc(
+                $newData,
+                $oldData
+            );
+
+            DB::commit();
+
+            /*
+            |--------------------------------------------------------------------------
+            | حذف الصورة القديمة بعد نجاح العملية
+            |--------------------------------------------------------------------------
+            */
+
+            if ($oldImage && isset($changes['image'])) {
+                $this->fileUploadService->deleteFile($oldImage);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Audit
+            |--------------------------------------------------------------------------
+            */
+
+            if (! empty($changes)) {
+                $this->auditService->log(
+                    auth()->id(),
+                    'update',
+                    'cities',
+                    $city->id,
+                    array_intersect_key($oldData, $changes),
+                    $changes
+                );
+            }
+
+            return $this->success(
+                $city->fresh()->load('country'),
+                'تم تحديث المدينة بنجاح'
+            );
+
+        } catch (\Exception $e) {
+
+            DB::rollBack();
+
+            Log::error('City update failed', [
+                'error' => $e->getMessage(),
+                'id' => $city->id,
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return $this->error(
+                'حدث خطأ أثناء تحديث المدينة. يرجى المحاولة مرة أخرى.',
+                null,
+                422
+            );
+        }
+    }
+
+    /**
+     * حذف مدينة
+     */
+    public function destroy(City $city): JsonResponse
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | منع حذف مدينة مرتبطة برحلات
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            $city->departingTrips()->exists() ||
+            $city->arrivingTrips()->exists()
+        ) {
+            return $this->error(
+                'لا يمكن حذف مدينة مرتبطة برحلات',
+                null,
+                422
+            );
+        }
+
+        try {
+            $oldData = $city->toArray();
+            $image = $city->image;
+            $cityId = $city->id;
+
+            DB::beginTransaction();
+
+            $city->delete();
+
+            DB::commit();
+
+            /*
+            |--------------------------------------------------------------------------
+            | حذف الصورة
+            |--------------------------------------------------------------------------
+            */
+
+            if ($image) {
+                $this->fileUploadService->deleteFile($image);
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Audit
+            |--------------------------------------------------------------------------
+            */
+
+            $this->auditService->log(
+                auth()->id(),
+                'delete',
+                'cities',
+                $cityId,
+                $oldData,
+                null
+            );
+
+            return $this->success(
+                null,
+                'تم حذف المدينة بنجاح'
+            );
+
+        } catch (\Exception $e) {
+
+            DB::rollBack();
+
+            Log::error('City destroy failed', [
+                'error' => $e->getMessage(),
+                'id' => $cityId,
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return $this->error(
+                'تعذر إتمام عملية الحذف. يرجى المحاولة لاحقاً.',
+                null,
+                422
+            );
+        }
+    }
+
+    /*
     public function index(): View
     {
         $cities = City::with('country')->paginate(15);
@@ -176,4 +448,5 @@ class CityController extends Controller
             return back()->with('error', 'تعذر إتمام عملية الحذف. يرجى المحاولة لاحقاً.');
         }
     }
+        */
 }

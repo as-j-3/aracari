@@ -20,6 +20,7 @@ class TripResource extends JsonResource
             'image' => $this->image_url,
             'provider' => $this->when($this->user, function () {
                 return [
+                    'id'=> $this->user->id,
                     'uuid' => $this->user->uuid,
                     'name' => $this->user->name,
                     'logo' => $this->user->providerService?->brand_photo_url,

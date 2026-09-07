@@ -13,7 +13,7 @@ Route::prefix('taxes')->name('taxes.')->group(function () {
     
     Route::middleware('throttle:10,1')->group(function () {
         Route::post('/', [TaxController::class, 'store'])->name('store')->middleware('permission:taxes:create');
-        Route::put('/{tax:uuid}', [TaxController::class, 'update'])->name('update')->middleware('permission:taxes:edit');
+        Route::match(['put', 'post'], '/{tax:uuid}', [TaxController::class, 'update'])->name('update')->middleware('permission:taxes:edit');
         Route::delete('/{tax:uuid}', [TaxController::class, 'destroy'])->name('destroy')->middleware('permission:taxes:delete');
     });
 });

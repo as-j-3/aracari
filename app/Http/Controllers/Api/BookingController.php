@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\Booking\BookTripRequest;
 use App\Http\Requests\Api\Booking\BookRoundTripRequest;
+use App\Http\Requests\Api\Booking\InitiateBookingRequest;
+use App\Http\Requests\Api\Booking\ConfirmBookingPaymentRequest;
 use App\Http\Resources\BookingResource;
 use App\Services\BookingService;
 use App\Services\CommissionService;
@@ -14,6 +16,7 @@ use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use App\Constants\PaymentMethod;
 use App\DTOs\BookTripDTO;
+use App\DTOs\InitiateBookingDTO;
 class BookingController extends Controller
 {
     use ApiResponse;
@@ -57,6 +60,62 @@ class BookingController extends Controller
     }
 
 
+    /**
+     * المرحلة الأولى: استقبال بيانات الركاب والتحقق من الرحلة وقفل المقاعد (Hold لمدة دقيقتين)
+     * POST /api/bookings/{tripUuid}/initiate
+     */
+    public function initiateBooking(InitiateBookingRequest $request, string $tripUuid): JsonResponse
+    {
+        $dto = InitiateBookingDTO::fromRequest($request->validated(), auth()->id(), $tripUuid);
+        $result = $this->bookingService->initiateBooking($dto);
+
+        if (! $result['success']) {
+            return $this->error($result['message'], null, 400);
+        }
+
+        return $this->success($result['data'], $result['message'], 201);
+    }
+
+    /**
+     * المرحلة الثانية: رابط الدفع وعرض مؤقت الهولد وطرق الدفع وملخص الحساب في رد واحد
+     * GET /api/bookings/{uuid}/checkout
+     */
+    public function checkout(string $uuid): JsonResponse
+    {
+        $result = $this->bookingService->getBookingCheckoutDetails($uuid, auth()->id());
+
+        if (! $result['success']) {
+            return $this->error($result['message'], null, 404);
+        }
+
+        return $this->success($result['data'], $result['message']);
+    }
+
+    /**
+     * المرحلة الثالثة: تأكيد الدفع للحجز الموجود مسبقاً وإنهاء الحجز وإصدار التذاكر
+     * POST /api/bookings/{uuid}/confirm-payment
+     */
+    public function confirmPayment(ConfirmBookingPaymentRequest $request, string $uuid): JsonResponse
+    {
+        $validated = $request->validated();
+        $result = $this->bookingService->confirmBookingPayment(
+            $uuid,
+            auth()->id(),
+            (int) $validated['payment_method_id'],
+            $validated['stripe_token'] ?? null
+        );
+
+        if (! $result['success']) {
+            return $this->error($result['message'], null, 400);
+        }
+
+        return $this->success($result['data'], $result['message']);
+    }
+
+    /**
+     * [الكود السابق محفوظ] - حجز رحلة واحدة مباشرة (Legacy direct-booking flow)
+     * محفوظ لدواعي التوافقية وعدم الحذف
+     */
     public function store(BookTripRequest $request, string $tripUuid): JsonResponse
     {
         $dto = BookTripDTO::fromRequest($request->validated(), auth()->id(), $tripUuid);

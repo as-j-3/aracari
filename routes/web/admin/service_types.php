@@ -14,7 +14,7 @@ Route::prefix('service-types')->name('service-types.')->group(function () {
     
     Route::middleware('throttle:10,1')->group(function () {
         Route::post('/', [TypeOfServiceController::class, 'store'])->name('store')->middleware('permission:service-types:create');
-        Route::put('/{serviceType}', [TypeOfServiceController::class, 'update'])->name('update')->middleware('permission:service-types:edit');
+        Route::match(['put', 'post'], '/{serviceType}', [TypeOfServiceController::class, 'update'])->name('update')->middleware('permission:service-types:edit');
         Route::delete('/{serviceType}', [TypeOfServiceController::class, 'destroy'])->name('destroy')->middleware('permission:service-types:delete');
     });
 });

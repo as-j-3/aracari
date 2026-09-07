@@ -56,4 +56,9 @@ class PaymentMethod extends Model
     {
         return $this->belongsTo(Currency::class);
     }
+
+    public function commissionPaymentMethods()
+    {
+        return $this->hasMany(CommissionPaymentMethod::class);
+    }
 }

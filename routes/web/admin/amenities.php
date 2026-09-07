@@ -13,7 +13,7 @@ Route::prefix('amenities')->name('amenities.')->group(function () {
     
     Route::middleware('throttle:10,1')->group(function () {
         Route::post('/', [AmenityController::class, 'store'])->name('store')->middleware('permission:amenities:create');
-        Route::put('/{amenity:uuid}', [AmenityController::class, 'update'])->name('update')->middleware('permission:amenities:edit');
+        Route::match(['put', 'post'], '/{amenity:uuid}', [AmenityController::class, 'update'])->name('update')->middleware('permission:amenities:edit');
         Route::delete('/{amenity:uuid}', [AmenityController::class, 'destroy'])->name('destroy')->middleware('permission:amenities:delete');
     });
 });

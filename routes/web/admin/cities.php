@@ -13,7 +13,7 @@ Route::prefix('cities')->name('cities.')->group(function () {
     
     Route::middleware('throttle:10,1')->group(function () {
         Route::post('/', [CityController::class, 'store'])->name('store')->middleware('permission:cities:create');
-        Route::put('/{city:uuid}', [CityController::class, 'update'])->name('update')->middleware('permission:cities:edit');
+        Route::match(['PUT', 'post'], '/{city:uuid}', [CityController::class, 'update'])->name('update')->middleware('permission:cities:edit');
         Route::delete('/{city:uuid}', [CityController::class, 'destroy'])->name('destroy')->middleware('permission:cities:delete');
     });
 });
