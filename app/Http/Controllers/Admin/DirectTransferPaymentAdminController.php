@@ -2,15 +2,18 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Constants\AccountCodes;
 use App\Constants\BookingStatus;
 use App\Constants\TripSeatStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserDirectPaymentInfoResource;
+use App\Models\Account;
 use App\Models\Booking;
 use App\Models\BookingPayment;
+use App\Models\TransactionReference;
+use App\Models\Trip;
 use App\Models\TripSeat;
 use App\Models\UserDirectPaymentInfo;
-use App\Models\TransactionReference;
 use App\Services\AuditService;
 use App\Services\BookingService;
 use Illuminate\Http\JsonResponse;
@@ -114,56 +117,27 @@ class DirectTransferPaymentAdminController extends Controller
     }
 
     /**
-     * عرض تفاصيل تحويل مباشر.
-     */
-    public function show(string $uuid): JsonResponse
-    {
-        $paymentInfo = UserDirectPaymentInfo::query()
-            ->where('uuid', $uuid)
-            ->with([
-                'directTransferPayment.paymentMethod',
-                'bookingPayment.booking.user',
-            ])
-            ->first();
-
-        if (! $paymentInfo) {
-            return $this->error(
-                'بيانات التحويل غير موجودة',
-                null,
-                404
-            );
-        }
-
-        return $this->success(
-            new UserDirectPaymentInfoResource($paymentInfo),
-            'تم جلب بيانات التحويل بنجاح'
-        );
-    }
-
-    /**
      * اعتماد التحويل وتأكيد الحجز.
      */
-    public function approve(
-        string $uuid,
-        Request $request
-    ): JsonResponse {
+    public function approve(string $uuid): JsonResponse
+    {
         try {
-            DB::beginTransaction();
 
             /*
             |--------------------------------------------------------------------------
-            | 1. جلب بيانات التحويل مع القفل
+            | المرحلة 1: جميع التحققات بدون تعديل
             |--------------------------------------------------------------------------
             */
 
             $paymentInfo = UserDirectPaymentInfo::query()
                 ->where('uuid', $uuid)
-                ->lockForUpdate()
+                ->with([
+                    'bookingPayment.booking',
+                    'directTransferPayment',
+                ])
                 ->first();
 
             if (! $paymentInfo) {
-                DB::rollBack();
-
                 return $this->error(
                     'بيانات التحويل غير موجودة',
                     null,
@@ -171,20 +145,9 @@ class DirectTransferPaymentAdminController extends Controller
                 );
             }
 
-            /*
-            |--------------------------------------------------------------------------
-            | 2. جلب BookingPayment
-            |--------------------------------------------------------------------------
-            */
-
-            $bookingPayment = BookingPayment::query()
-                ->where('id', $paymentInfo->booking_payment_id)
-                ->lockForUpdate()
-                ->first();
+            $bookingPayment = $paymentInfo->bookingPayment;
 
             if (! $bookingPayment) {
-                DB::rollBack();
-
                 return $this->error(
                     'عملية الدفع غير موجودة',
                     null,
@@ -192,50 +155,9 @@ class DirectTransferPaymentAdminController extends Controller
                 );
             }
 
-            /*
-            |--------------------------------------------------------------------------
-            | 3. منع اعتماد العملية أكثر من مرة
-            |--------------------------------------------------------------------------
-            */
-
-            if ($bookingPayment->paid_status === 'paid') {
-                DB::rollBack();
-
-                return $this->error(
-                    'تم اعتماد عملية الدفع مسبقاً',
-                    null,
-                    422
-                );
-            }
-
-            if ($bookingPayment->paid_status === 'rejected') {
-                DB::rollBack();
-
-                return $this->error(
-                    'عملية الدفع مرفوضة مسبقاً',
-                    null,
-                    422
-                );
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | 4. جلب الحجز
-            |--------------------------------------------------------------------------
-            */
-
-            $booking = Booking::query()
-                ->where('id', $bookingPayment->booking_id)
-                ->with([
-                    'tripReservations.trip.vehicle',
-                    'taxes',
-                ])
-                ->lockForUpdate()
-                ->first();
+            $booking = $bookingPayment->booking;
 
             if (! $booking) {
-                DB::rollBack();
-
                 return $this->error(
                     'الحجز غير موجود',
                     null,
@@ -244,19 +166,109 @@ class DirectTransferPaymentAdminController extends Controller
             }
 
             /*
-            |--------------------------------------------------------------------------
-            | 5. التحقق من حالة الحجز
-            |--------------------------------------------------------------------------
+            |----------------------------------------------------------------------
+            | التحقق من حالة الدفع
+            |----------------------------------------------------------------------
+            */
+
+            if ($bookingPayment->paid_status !== 'pending') {
+                return $this->error(
+                    'عملية الدفع تمت معالجتها مسبقاً',
+                    null,
+                    422
+                );
+            }
+
+            /*
+            |----------------------------------------------------------------------
+            | التحقق من حالة الحجز
+            |----------------------------------------------------------------------
             */
 
             if (
                 (int) $booking->booking_status_id !==
                 BookingStatus::PENDING
             ) {
-                DB::rollBack();
-
                 return $this->error(
-                    'حالة الحجز لا تسمح بتأكيد الدفع',
+                    'حالة الحجز لا تسمح بالاعتماد',
+                    null,
+                    422
+                );
+            }
+
+            /*
+            |----------------------------------------------------------------------
+            | جلب المقاعد
+            |----------------------------------------------------------------------
+            */
+
+            $tripSeats = TripSeat::query()
+                ->where('booking_id', $booking->id)
+                ->get();
+
+            if ($tripSeats->isEmpty()) {
+                return $this->error(
+                    'لا توجد مقاعد مرتبطة بالحجز',
+                    null,
+                    422
+                );
+            }
+
+            /*
+            |----------------------------------------------------------------------
+            | التحقق من أن جميع المقاعد BOOKED
+            |----------------------------------------------------------------------
+            */
+
+            $invalidSeat = $tripSeats->first(
+                fn ($seat) => (int) $seat->trip_seat_status_id !==
+                    TripSeatStatus::BOOKED
+            );
+
+            if ($invalidSeat) {
+                return $this->error(
+                    'يوجد مقعد حالته غير صحيحة لهذا الحجز',
+                    null,
+                    422
+                );
+            }
+
+            /*
+            |----------------------------------------------------------------------
+            | التحقق من المزود
+            |----------------------------------------------------------------------
+            */
+
+            $providerId = $booking
+                ->tripReservations
+                ->first()?->trip
+                ?->vehicle
+                ?->user_id;
+
+            if (! $providerId) {
+                return $this->error(
+                    'تعذر تحديد مزود الخدمة',
+                    null,
+                    422
+                );
+            }
+
+            /*
+            |----------------------------------------------------------------------
+            | التحقق من حساب المزود
+            |----------------------------------------------------------------------
+            */
+
+            $providerAccount = Account::where(
+                'account_code',
+                AccountCodes::providerAccount(
+                    $providerId
+                )
+            )->first();
+
+            if (! $providerAccount) {
+                return $this->error(
+                    'الحساب المحاسبي لمزود الخدمة غير موجود',
                     null,
                     422
                 );
@@ -264,7 +276,107 @@ class DirectTransferPaymentAdminController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | 6. تحديث BookingPayment
+            | حسابات القيد في الذاكرة
+            |--------------------------------------------------------------------------
+            |
+            | هنا نحسب القيد المتوقع أولاً.
+            | لا ننشئ أي TransactionReference أو Transaction حتى الآن.
+            |
+            */
+
+            $totalPaid = round(
+                (float) $bookingPayment->payed_amount,
+                2
+            );
+
+            $commission = round(
+                (float) $booking->commission_amount,
+                2
+            );
+
+            $providerAmount = round(
+                $totalPaid - $commission,
+                2
+            );
+
+            if ($providerAmount < 0) {
+                return $this->error(
+                    'خطأ في حساب مستحق المزود',
+                    null,
+                    422
+                );
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | التحقق من توازن القيد المتوقع
+            |--------------------------------------------------------------------------
+            */
+
+            $totalDebit = $totalPaid;
+
+            $totalCredit =
+                $providerAmount +
+                $commission;
+
+            if (
+                abs($totalDebit - $totalCredit) >
+                0.01
+            ) {
+                return $this->error(
+                    'القيد المحاسبي المتوقع غير متوازن',
+                    null,
+                    422
+                );
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | المرحلة 2: بعد نجاح جميع التحققات
+            |--------------------------------------------------------------------------
+            */
+
+            DB::beginTransaction();
+
+            /*
+            |--------------------------------------------------------------------------
+            | قفل السجلات مرة ثانية قبل التعديل
+            |--------------------------------------------------------------------------
+            */
+
+            $paymentInfo = UserDirectPaymentInfo::query()
+                ->where('id', $paymentInfo->id)
+                ->lockForUpdate()
+                ->first();
+
+            $bookingPayment = BookingPayment::query()
+                ->where('id', $bookingPayment->id)
+                ->lockForUpdate()
+                ->first();
+
+            $booking = Booking::query()
+                ->where('id', $booking->id)
+                ->lockForUpdate()
+                ->first();
+
+            /*
+            |--------------------------------------------------------------------------
+            | إعادة التحقق بعد القفل
+            |--------------------------------------------------------------------------
+            */
+
+            if (
+                $bookingPayment->paid_status !== 'pending' ||
+                (int) $booking->booking_status_id !== BookingStatus::PENDING
+            ) {
+                throw new \RuntimeException(
+                    'تم تغيير حالة العملية أثناء المعالجة'
+                );
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | تحديث حالة الدفع
             |--------------------------------------------------------------------------
             */
 
@@ -277,7 +389,7 @@ class DirectTransferPaymentAdminController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | 7. تأكيد الحجز
+            | تأكيد الحجز
             |--------------------------------------------------------------------------
             */
 
@@ -287,51 +399,12 @@ class DirectTransferPaymentAdminController extends Controller
 
             /*
             |--------------------------------------------------------------------------
-            | 8. التأكد من المقاعد
-            |--------------------------------------------------------------------------
-            |
-            | المقاعد أصبحت BOOKED بالفعل عند إرسال التحويل.
-            | هنا نتأكد فقط أنها ما زالت كذلك.
-            |
-            */
-
-            $tripSeats = TripSeat::query()
-                ->where('booking_id', $booking->id)
-                ->lockForUpdate()
-                ->get();
-
-            if ($tripSeats->isEmpty()) {
-                DB::rollBack();
-
-                return $this->error(
-                    'لا توجد مقاعد مرتبطة بالحجز',
-                    null,
-                    422
-                );
-            }
-
-            foreach ($tripSeats as $tripSeat) {
-                if (
-                    (int) $tripSeat->trip_seat_status_id !==
-                    TripSeatStatus::BOOKED
-                ) {
-                    $tripSeat->update([
-                        'trip_seat_status_id' =>
-                            TripSeatStatus::BOOKED,
-                        'reserved_until' => null,
-                    ]);
-                }
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | 9. إنشاء المرجع المحاسبي
+            | إنشاء المرجع المحاسبي
             |--------------------------------------------------------------------------
             */
 
             $transactionReference = TransactionReference::create([
-                'reference_number' =>
-                    'BOOK-' . strtoupper(Str::random(8)),
+                'reference_number' => 'BOOK-'.strtoupper(Str::random(8)),
 
                 'reference_type' => 'booking',
 
@@ -339,41 +412,55 @@ class DirectTransferPaymentAdminController extends Controller
 
                 'created_by' => auth()->id(),
 
-                'status' =>
-                    \App\Constants\TransactionReferenceStatus::DRAFT,
+                'status' => TransactionReferenceStatus::DRAFT,
 
-                'description' =>
-                    'اعتماد تحويل مباشر للحجز - ' .
+                'description' => 'اعتماد تحويل مباشر للحجز - '.
                     $booking->uuid,
             ]);
 
             /*
             |--------------------------------------------------------------------------
-            | 10. إنشاء القيد المحاسبي
+            | إنشاء القيود
             |--------------------------------------------------------------------------
-            |
-            | ضريبة التذكرة تخص المزود وتدخل ضمن مستحقه،
-            | لذلك لا نسجلها كالتزام ضريبي على أراكاري.
-            |
             */
 
-            $this->createBookingAccountingEntry(
+            // مدين: المبلغ المستلم
+            // دائن: مستحق المزود
+            // دائن: عمولة أراكاري
+
+            // هنا نستدعي AccountingService / BookingService
+            // لإنشاء transaction lines
+
+            $this->accountingService->recordBookingEntry(
                 $booking,
                 $bookingPayment,
-                $transactionReference
+                $transactionReference,
+                $providerAmount,
+                $commission
             );
 
             /*
             |--------------------------------------------------------------------------
-            | 11. تثبيت العملية
+            | التحقق النهائي من توازن القيد
             |--------------------------------------------------------------------------
             */
+
+            if (
+                ! $this->transactionRepository
+                    ->validateEntryBalance(
+                        $transactionReference->id
+                    )
+            ) {
+                throw new \RuntimeException(
+                    'القيد المحاسبي غير متوازن'
+                );
+            }
 
             DB::commit();
 
             /*
             |--------------------------------------------------------------------------
-            | 12. Audit
+            | Audit بعد النجاح
             |--------------------------------------------------------------------------
             */
 
@@ -388,11 +475,10 @@ class DirectTransferPaymentAdminController extends Controller
                 ],
                 [
                     'paid_status' => 'paid',
+                    'booking_status_id' => BookingStatus::CONFIRMED,
                     'verified_by_user' => auth()->id(),
                     'verified_at' => now()->toDateTimeString(),
-                    'booking_status_id' => BookingStatus::CONFIRMED,
-                    'transaction_reference_id' =>
-                        $transactionReference->id,
+                    'transaction_reference_id' => $transactionReference->id,
                 ]
             );
 
@@ -400,10 +486,9 @@ class DirectTransferPaymentAdminController extends Controller
                 [
                     'booking_uuid' => $booking->uuid,
                     'booking_payment_id' => $bookingPayment->id,
-                    'payment_status' => $bookingPayment->paid_status,
-                    'booking_status' => $booking->booking_status_id,
-                    'transaction_reference_id' =>
-                        $transactionReference->id,
+                    'payment_status' => 'paid',
+                    'booking_status' => BookingStatus::CONFIRMED,
+                    'transaction_reference_id' => $transactionReference->id,
                 ],
                 'تم اعتماد الحوالة وتأكيد الحجز وإنشاء القيد المحاسبي'
             );
@@ -420,12 +505,11 @@ class DirectTransferPaymentAdminController extends Controller
                     'uuid' => $uuid,
                     'admin_id' => auth()->id(),
                     'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString(),
                 ]
             );
 
             return $this->error(
-                'حدث خطأ أثناء اعتماد الحوالة',
+                'لم يتم اعتماد الحوالة. لم يتم حفظ أي تغييرات.',
                 null,
                 500
             );
@@ -549,8 +633,7 @@ class DirectTransferPaymentAdminController extends Controller
                 'paid_status' => 'rejected',
                 'verified_by_user' => auth()->id(),
                 'verified_at' => now(),
-                'reject_reason' =>
-                    $validated['reject_reason'],
+                'reject_reason' => $validated['reject_reason'],
             ]);
 
             /*
@@ -599,8 +682,7 @@ class DirectTransferPaymentAdminController extends Controller
 
                 foreach ($seats as $tripSeat) {
                     $tripSeat->update([
-                        'trip_seat_status_id' =>
-                            TripSeatStatus::AVAILABLE,
+                        'trip_seat_status_id' => TripSeatStatus::AVAILABLE,
 
                         'booking_id' => null,
 
@@ -616,7 +698,7 @@ class DirectTransferPaymentAdminController extends Controller
                 |--------------------------------------------------------------------------
                 */
 
-                $trip = \App\Models\Trip::query()
+                $trip = Trip::query()
                     ->where('id', $tripId)
                     ->lockForUpdate()
                     ->first();
@@ -658,10 +740,8 @@ class DirectTransferPaymentAdminController extends Controller
                     'paid_status' => 'rejected',
                     'verified_by_user' => auth()->id(),
                     'verified_at' => now()->toDateTimeString(),
-                    'reject_reason' =>
-                        $validated['reject_reason'],
-                    'booking_status_id' =>
-                        BookingStatus::CANCELLED,
+                    'reject_reason' => $validated['reject_reason'],
+                    'booking_status_id' => BookingStatus::CANCELLED,
                 ]
             );
 
@@ -783,7 +863,7 @@ class DirectTransferPaymentAdminController extends Controller
         }
 
         $providerCode =
-            \App\Constants\AccountCodes::providerAccount(
+            AccountCodes::providerAccount(
                 $providerId
             );
 
@@ -794,14 +874,11 @@ class DirectTransferPaymentAdminController extends Controller
         */
 
         $commonData = [
-            'transaction_reference_id' =>
-                $transactionReference->id,
+            'transaction_reference_id' => $transactionReference->id,
 
-            'currency_id' =>
-                $bookingPayment->currency_id,
+            'currency_id' => $bookingPayment->currency_id,
 
-            'exchange_rate' =>
-                $bookingPayment->exchange_rate,
+            'exchange_rate' => $bookingPayment->exchange_rate,
         ];
 
         /*
@@ -816,20 +893,15 @@ class DirectTransferPaymentAdminController extends Controller
                 array_merge(
                     $commonData,
                     [
-                        'account_code' =>
-                            \App\Constants\AccountCodes::ASSETS,
+                        'account_code' => AccountCodes::ASSETS,
 
-                        'transaction_type' =>
-                            'debit',
+                        'transaction_type' => 'debit',
 
-                        'amount' =>
-                            $totalPaid,
+                        'amount' => $totalPaid,
 
-                        'base_amount' =>
-                            $baseTotalPaid,
+                        'base_amount' => $baseTotalPaid,
 
-                        'description' =>
-                            "استلام تحويل مباشر للحجز #{$booking->id}",
+                        'description' => "استلام تحويل مباشر للحجز #{$booking->id}",
                     ]
                 )
             );
@@ -846,20 +918,15 @@ class DirectTransferPaymentAdminController extends Controller
                 array_merge(
                     $commonData,
                     [
-                        'account_code' =>
-                            $providerCode,
+                        'account_code' => $providerCode,
 
-                        'transaction_type' =>
-                            'credit',
+                        'transaction_type' => 'credit',
 
-                        'amount' =>
-                            $providerAmount,
+                        'amount' => $providerAmount,
 
-                        'base_amount' =>
-                            $baseProviderAmount,
+                        'base_amount' => $baseProviderAmount,
 
-                        'description' =>
-                            "مستحق مزود الخدمة - الحجز #{$booking->id}",
+                        'description' => "مستحق مزود الخدمة - الحجز #{$booking->id}",
                     ]
                 )
             );
@@ -878,20 +945,15 @@ class DirectTransferPaymentAdminController extends Controller
                     array_merge(
                         $commonData,
                         [
-                            'account_code' =>
-                                \App\Constants\AccountCodes::REVENUE,
+                            'account_code' => AccountCodes::REVENUE,
 
-                            'transaction_type' =>
-                                'credit',
+                            'transaction_type' => 'credit',
 
-                            'amount' =>
-                                $commission,
+                            'amount' => $commission,
 
-                            'base_amount' =>
-                                $baseCommission,
+                            'base_amount' => $baseCommission,
 
-                            'description' =>
-                                "عمولة أراكاري - الحجز #{$booking->id}",
+                            'description' => "عمولة أراكاري - الحجز #{$booking->id}",
                         ]
                     )
                 );

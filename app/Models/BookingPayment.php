@@ -27,6 +27,10 @@ class BookingPayment extends Model
         'exchange_rate',
         'base_amount',
         'note',
+        'reject_reason',
+        'verified_at',
+        'verified_by_user',
+        'paid_status'
     ];
 
     protected $casts = [
