@@ -1097,8 +1097,23 @@ class ProviderServiceController extends Controller
         }
     }
     */
-    private function ensureProviderAccount(int $userId, string $providerName): void
+    private function ensureProviderAccount(int $userId, string $providerName): ?string
     {
+        $user = User::find($userId);
+
+        if (! $user) {
+            Log::warning('Provider user not found', [
+                'user_id' => $userId,
+            ]);
+
+            return null;
+        }
+
+        // إذا عنده حساب مسبقًا، نستخدمه
+        if (! empty($user->account_code)) {
+            return $user->account_code;
+        }
+
         $parent = Account::where('account_code', '2200')->first();
 
         if (! $parent) {
@@ -1106,13 +1121,15 @@ class ProviderServiceController extends Controller
                 'user_id' => $userId,
             ]);
 
-            return;
+            return null;
         }
 
+        // إنشاء رقم حساب جديد
         $accountCode = AccountCodes::providerAccount();
 
         $accountName = 'مستحقات مزود - '.$providerName;
 
+        // إنشاء الحساب
         Account::firstOrCreate(
             [
                 'account_code' => $accountCode,
@@ -1125,9 +1142,14 @@ class ProviderServiceController extends Controller
                 'created_by_user' => auth()->id(),
             ]
         );
-    }
 
-   
+        // حفظ نفس الرقم في المستخدم
+        $user->update([
+            'account_code' => $accountCode,
+        ]);
+
+        return $accountCode;
+    }
 
     private function getProvidersWithoutService()
     {

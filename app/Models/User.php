@@ -32,6 +32,7 @@ class User extends Authenticatable
         'status_id',
         'type_user_code',
         'user_parent',
+        'account_code',
         'is_approved',
     ];
 

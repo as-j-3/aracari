@@ -30,6 +30,16 @@ use App\Repositories\Contracts\PassengerRepositoryInterface;
 use App\Repositories\PassengerRepository;
 use App\Repositories\Contracts\TicketRepositoryInterface;
 use App\Repositories\TicketRepository;
+use App\Repositories\Contracts\PaymentMethodRepositoryInterface;
+use App\Repositories\PaymentMethodRepository;
+use App\Repositories\Contracts\ExchangeRateRepositoryInterface;
+use App\Repositories\ExchangeRateRepository;
+use App\Repositories\Contracts\DigitalPocketRepositoryInterface;
+use App\Repositories\DigitalPocketRepository;
+use App\Repositories\Contracts\CurrencyRepositoryInterface;
+use App\Repositories\CurrencyRepository;
+use App\Repositories\Contracts\ReceiveRevenueRepositoryInterface;
+use App\Repositories\ReceiveRevenueRepository;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\View;
 use App\Observers\ProviderBranchObserver;
@@ -47,6 +57,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(TransactionRepositoryInterface::class,TransactionRepository::class);
         $this->app->bind(PassengerRepositoryInterface::class,PassengerRepository::class);
         $this->app->bind(TicketRepositoryInterface::class,TicketRepository::class);
+        $this->app->bind(PaymentMethodRepositoryInterface::class,PaymentMethodRepository::class);
+        $this->app->bind(ExchangeRateRepositoryInterface::class,ExchangeRateRepository::class);
+        $this->app->bind(DigitalPocketRepositoryInterface::class,DigitalPocketRepository::class);
+        $this->app->bind(CurrencyRepositoryInterface::class,CurrencyRepository::class);
+        $this->app->bind(ReceiveRevenueRepositoryInterface::class,ReceiveRevenueRepository::class);
     }
 
     /**

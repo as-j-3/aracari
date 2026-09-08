@@ -13,7 +13,7 @@ Route::controller(ExchangeRateController::class)->prefix('exchange-rates')->name
     
     Route::middleware('throttle:10,1')->group(function () {
         Route::post('/', 'store')->name('store')->middleware('permission:exchange-rates:create');
-        Route::put('/{exchangeRate}', 'update')->name('update')->middleware('permission:exchange-rates:edit');
+        Route::match(['put', 'post'], '/{exchangeRate}', 'update')->name('update')->middleware('permission:exchange-rates:edit');
         Route::delete('/{exchangeRate}', 'destroy')->name('destroy')->middleware('permission:exchange-rates:delete');
     });
 });

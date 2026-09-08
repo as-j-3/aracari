@@ -7,9 +7,12 @@ use App\Models\PaymentMethod;
 use App\Http\Requests\Web\PaymentMethod\StorePaymentMethodRequest;
 use App\Http\Requests\Web\PaymentMethod\UpdatePaymentMethodRequest;
 use App\Http\Requests\Web\Lookup\IndexLookupRequest;
+use App\Http\Resources\Admin\PaymentMethodResource;
+use App\Repositories\Contracts\PaymentMethodRepositoryInterface;
 use App\Services\AuditService;
 use Illuminate\View\View;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Database\Eloquent\Builder;
@@ -18,12 +21,217 @@ class PaymentMethodController extends Controller
 {
     protected AuditService $auditService;
 
-    public function __construct(AuditService $auditService)
-    {
+    protected PaymentMethodRepositoryInterface $paymentMethodRepository;
+
+    public function __construct(
+        AuditService $auditService,
+        PaymentMethodRepositoryInterface $paymentMethodRepository
+    ) {
         $this->auditService = $auditService;
+        $this->paymentMethodRepository = $paymentMethodRepository;
         $this->middleware('require.admin');
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | واجهة برمجية (API) - استجابات JSON
+    |--------------------------------------------------------------------------
+    |
+    | تم تحويل الدوال الآتية لتعمل كهيئة API باستخدام success()/error()
+    | والمنطق نفسه في دوال الويب القديمة (محفوظة بالأسفل كتعليقات).
+    |
+    */
+
+    public function index(IndexLookupRequest $request): JsonResponse
+    {
+        $methods = $this->paymentMethodRepository->search(
+            [
+                'search' => $request->validated('search'),
+            ],
+            $request->validated('per_page') ?? 15
+        );
+
+        return $this->success(
+            PaymentMethodResource::collection($methods),
+            'تم استرجاع وسائل الدفع بنجاح'
+        );
+    }
+
+    
+
+    public function store(StorePaymentMethodRequest $request): JsonResponse
+    {
+        try {
+            DB::beginTransaction();
+
+            $method = $this->paymentMethodRepository->create($request->validated());
+
+            DB::afterCommit(function () use ($method) {
+                $this->auditService->log(
+                    auth()->id(),
+                    'create',
+                    'payment_methods',
+                    $method->id,
+                    null,
+                    $method->fresh()->toArray()
+                );
+
+                cache()->forget('payment-methods-list');
+            });
+
+            DB::commit();
+
+            return $this->success(
+                new PaymentMethodResource($method->fresh()),
+                'تم إضافة وسيلة الدفع بنجاح'
+            );
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('PaymentMethod store failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return $this->error(
+                'حدث خطأ أثناء إضافة وسيلة الدفع. يرجى المحاولة مرة أخرى.',
+                null,
+                422
+            );
+        }
+    }
+
+    public function update(UpdatePaymentMethodRequest $request, int $id): JsonResponse
+    {
+        $method = $this->paymentMethodRepository->findById($id);
+
+        if (! $method) {
+            return $this->error(
+                'وسيلة الدفع غير موجودة',
+                null,
+                404
+            );
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $oldValues = $method->toArray();
+            $this->paymentMethodRepository->update($method->id, $request->validated());
+
+            DB::afterCommit(function () use ($method, $oldValues) {
+                $this->auditService->log(
+                    auth()->id(),
+                    'update',
+                    'payment_methods',
+                    $method->id,
+                    $oldValues,
+                    $method->fresh()->toArray()
+                );
+
+                cache()->forget('payment-methods-list');
+            });
+
+            DB::commit();
+
+            return $this->success(
+                new PaymentMethodResource($method->fresh()),
+                'تم تحديث وسيلة الدفع بنجاح'
+            );
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('PaymentMethod update failed', [
+                'error' => $e->getMessage(),
+                'id'    => $method->id,
+            ]);
+
+            return $this->error(
+                'حدث خطأ أثناء تحديث وسيلة الدفع. يرجى المحاولة مرة أخرى.',
+                null,
+                422
+            );
+        }
+    }
+
+    public function destroy(int $id): JsonResponse
+    {
+        $method = $this->paymentMethodRepository->findById($id);
+
+        if (! $method) {
+            return $this->error(
+                'وسيلة الدفع غير موجودة',
+                null,
+                404
+            );
+        }
+
+        if ($this->paymentMethodRepository->isSystemMethod($id)) {
+            return $this->error(
+                'لا يمكن حذف وسيلة دفع نظامية. يمكنك تعطيلها بدلاً من ذلك.',
+                null,
+                422
+            );
+        }
+
+        if ($this->paymentMethodRepository->hasBookingPayments($id)) {
+            return $this->error(
+                'لا يمكن حذف وسيلة الدفع لوجود حجوزات مرتبطة بها',
+                null,
+                422
+            );
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $recordId = $id;
+            $oldValues = $method->toArray();
+            $this->paymentMethodRepository->delete($id);
+
+            DB::afterCommit(function () use ($recordId, $oldValues) {
+                $this->auditService->log(
+                    auth()->id(),
+                    'delete',
+                    'payment_methods',
+                    $recordId,
+                    $oldValues,
+                    null
+                );
+
+                cache()->forget('payment-methods-list');
+            });
+
+            DB::commit();
+
+            return $this->success(
+                null,
+                'تم حذف وسيلة الدفع بنجاح'
+            );
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('PaymentMethod destroy failed', [
+                'error' => $e->getMessage(),
+                'id'    => $method->id,
+            ]);
+
+            return $this->error(
+                'تعذر إتمام عملية الحذف. يرجى المحاولة لاحقاً.',
+                null,
+                422
+            );
+        }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | دوال الويب القديمة (محفوظة كتعليقات وليست محذوفة)
+    |--------------------------------------------------------------------------
+    |
+    | كانت تعيد صفحات Blade عبر return view() / redirect().
+    | تم استبدالها بنسخ JSON أعلاه. نفس المنطق والتحقق.
+    |
+    */
+
+    /*
     public function index(IndexLookupRequest $request): View
     {
         $query = PaymentMethod::query();
@@ -176,4 +384,5 @@ class PaymentMethodController extends Controller
                 ->with('error', 'تعذر إتمام عملية الحذف. يرجى المحاولة لاحقاً.');
         }
     }
+    */
 }

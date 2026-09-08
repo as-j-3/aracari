@@ -13,11 +13,16 @@ class UpdateCurrencyRequest extends FormRequest
 
     public function rules(): array
     {
+        $currencyId = $this->route('currency');
+        $currencyId = $currencyId instanceof \App\Models\Currency
+            ? $currencyId->id
+            : (int) $currencyId;
+
         return [
-            'code' => ['required', 'string', 'size:3', \Illuminate\Validation\Rule::unique('currencies')->ignore($this->currency->id)],
-            'name' => ['required', 'string', 'max:100', \Illuminate\Validation\Rule::unique('currencies')->ignore($this->currency->id)],
+            'code' => ['required', 'string', 'size:3', \Illuminate\Validation\Rule::unique('currencies')->ignore($currencyId)],
+            'name' => ['required', 'string', 'max:100', \Illuminate\Validation\Rule::unique('currencies')->ignore($currencyId)],
             'symbol' => 'required|string|max:10',
-            'price_to_yr' => 'required|numeric|min:0.0001|max:999999',
+          
         ];
     }
 
@@ -30,7 +35,6 @@ class UpdateCurrencyRequest extends FormRequest
             'name.required' => 'اسم العملة مطلوب',
             'name.unique' => 'اسم العملة موجود مسبقاً',
             'symbol.required' => 'رمز العملة مطلوب',
-            'price_to_yr.required' => 'سعر الصرف مقابل الريال اليمني مطلوب',
         ];
     }
 }

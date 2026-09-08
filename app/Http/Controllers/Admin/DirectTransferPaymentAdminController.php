@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Constants\AccountCodes;
 use App\Constants\BookingStatus;
+use App\Constants\TransactionReferenceStatus;
 use App\Constants\TripSeatStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserDirectPaymentInfoResource;
@@ -13,6 +14,7 @@ use App\Models\BookingPayment;
 use App\Models\TransactionReference;
 use App\Models\Trip;
 use App\Models\TripSeat;
+use App\Models\User;
 use App\Models\UserDirectPaymentInfo;
 use App\Services\AuditService;
 use App\Services\BookingService;
@@ -259,11 +261,19 @@ class DirectTransferPaymentAdminController extends Controller
             |----------------------------------------------------------------------
             */
 
+            $providerUser = User::find($providerId);
+
+            if (! $providerUser || empty($providerUser->account_code)) {
+                return $this->error(
+                    'الحساب المحاسبي لمزود الخدمة غير مرتبط بالمستخدم',
+                    null,
+                    422
+                );
+            }
+
             $providerAccount = Account::where(
                 'account_code',
-                AccountCodes::providerAccount(
-                    $providerId
-                )
+                $providerUser->account_code
             )->first();
 
             if (! $providerAccount) {
@@ -273,7 +283,6 @@ class DirectTransferPaymentAdminController extends Controller
                     422
                 );
             }
-
             /*
             |--------------------------------------------------------------------------
             | حسابات القيد في الذاكرة
@@ -428,33 +437,14 @@ class DirectTransferPaymentAdminController extends Controller
             // دائن: مستحق المزود
             // دائن: عمولة أراكاري
 
-            // هنا نستدعي AccountingService / BookingService
-            // لإنشاء transaction lines
+            // إنشاء القيد المحاسبي عبر الـ helper
+            // (التي تتحقق من توازن القيد داخلياً في نهايتها)
 
-            $this->accountingService->recordBookingEntry(
+            $this->createBookingAccountingEntry(
                 $booking,
                 $bookingPayment,
-                $transactionReference,
-                $providerAmount,
-                $commission
+                $transactionReference
             );
-
-            /*
-            |--------------------------------------------------------------------------
-            | التحقق النهائي من توازن القيد
-            |--------------------------------------------------------------------------
-            */
-
-            if (
-                ! $this->transactionRepository
-                    ->validateEntryBalance(
-                        $transactionReference->id
-                    )
-            ) {
-                throw new \RuntimeException(
-                    'القيد المحاسبي غير متوازن'
-                );
-            }
 
             DB::commit();
 
@@ -862,10 +852,15 @@ class DirectTransferPaymentAdminController extends Controller
             );
         }
 
-        $providerCode =
-            AccountCodes::providerAccount(
-                $providerId
+        $providerUser = User::find($providerId);
+
+        if (! $providerUser || empty($providerUser->account_code)) {
+            throw new \RuntimeException(
+                'الحساب المحاسبي لمزود الخدمة غير مرتبط بالمستخدم'
             );
+        }
+
+        $providerCode = $providerUser->account_code;
 
         /*
         |--------------------------------------------------------------------------

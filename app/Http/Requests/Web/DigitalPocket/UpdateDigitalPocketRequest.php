@@ -14,7 +14,10 @@ class UpdateDigitalPocketRequest extends FormRequest
 
     public function rules(): array
     {
-        $pocketId = $this->route('digitalPocket')->id;
+        $pocketId = $this->route('digitalPocket');
+        $pocketId = $pocketId instanceof \App\Models\DigitalPocket
+            ? $pocketId->id
+            : (int) $pocketId;
 
         return [
             'pocket_name' => [

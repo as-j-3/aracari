@@ -48,7 +48,7 @@ Route::prefix('lookups')->name('lookups.')->group(function () {
         
         Route::middleware('throttle:10,1')->group(function () {
             Route::post('/', 'store')->name('store')->middleware('permission:payment-methods:create');
-            Route::put('/{id}', 'update')->name('update')->middleware('permission:payment-methods:edit');
+            Route::match(['put', 'post'], '/{id}', 'update')->name('update')->middleware('permission:payment-methods:edit');
             Route::delete('/{id}', 'destroy')->name('destroy')->middleware('permission:payment-methods:delete');
         });
     });

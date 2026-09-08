@@ -13,7 +13,7 @@ Route::controller(DigitalPocketController::class)->prefix('digital-pockets')->na
     
     Route::middleware('throttle:10,1')->group(function () {
         Route::post('/', 'store')->name('store')->middleware('permission:digital-pockets:create');
-        Route::put('/{digitalPocket}', 'update')->name('update')->middleware('permission:digital-pockets:edit');
+        Route::match(['PUT', 'post'], '/{digitalPocket}', 'update')->name('update')->middleware('permission:digital-pockets:edit');
         Route::delete('/{digitalPocket}', 'destroy')->name('destroy')->middleware('permission:digital-pockets:delete');
     });
 });

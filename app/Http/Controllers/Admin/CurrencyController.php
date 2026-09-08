@@ -7,6 +7,8 @@ use App\Models\Currency;
 use App\Http\Requests\Web\Currency\StoreCurrencyRequest;
 use App\Http\Requests\Web\Currency\UpdateCurrencyRequest;
 use App\Http\Requests\Web\Currency\IndexCurrencyRequest;
+use App\Http\Resources\Admin\CurrencyResource;
+use App\Repositories\Contracts\CurrencyRepositoryInterface;
 use App\Services\AuditService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
@@ -18,11 +20,218 @@ use Illuminate\Database\Eloquent\Builder;
 class CurrencyController extends Controller
 {
     public function __construct(
-        private AuditService $auditService
+        private AuditService $auditService,
+        private CurrencyRepositoryInterface $currencyRepository
     ) {
         $this->middleware('require.admin');
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | واجهة برمجية (API) - استجابات JSON
+    |--------------------------------------------------------------------------
+    |
+    | تم تحويل الدوال الآتية لتعمل كهيئة API باستخدام success()/error()
+    | والمنطق نفسه في دوال الويب القديمة (محفوظة بالأسفل كتعليقات).
+    |
+    */
+
+    public function index(IndexCurrencyRequest $request): JsonResponse
+    {
+        $currencies = $this->currencyRepository->search(
+            $request->validated(),
+            $request->validated('per_page') ?? 20
+        );
+
+        return $this->success(
+            CurrencyResource::collection($currencies),
+            'تم استرجاع العملات بنجاح'
+        );
+    }
+
+    public function store(StoreCurrencyRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+
+        try {
+            DB::beginTransaction();
+
+            $currency = $this->currencyRepository->create($validated);
+
+            DB::afterCommit(function () use ($currency) {
+                $this->auditService->log(
+                    auth()->id(),
+                    'create',
+                    'currencies',
+                    $currency->id,
+                    null,
+                    $currency->fresh()->toArray()
+                );
+
+                $this->clearCurrencyCache();
+            });
+
+            DB::commit();
+
+            return $this->success(
+                new CurrencyResource($currency->fresh()),
+                'تم إضافة العملة بنجاح'
+            );
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Currency store failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return $this->error(
+                'تعذر إتمام العملية. يرجى المحاولة مرة أخرى.',
+                null,
+                422
+            );
+        }
+    }
+
+    public function update(UpdateCurrencyRequest $request, int $currency): JsonResponse
+    {
+        $currency = $this->currencyRepository->findById($currency);
+
+        if (! $currency) {
+            return $this->error(
+                'العملة غير موجودة',
+                null,
+                404
+            );
+        }
+
+        $validated = $request->validated();
+        $oldData = $currency->toArray();
+        $currencyId = $currency->id;
+
+        try {
+            DB::beginTransaction();
+
+            $this->currencyRepository->update($currencyId, $validated);
+
+            DB::afterCommit(function () use ($currency, $oldData, $currencyId) {
+                $this->auditService->log(
+                    auth()->id(),
+                    'update',
+                    'currencies',
+                    $currencyId,
+                    $oldData,
+                    $currency->fresh()->toArray()
+                );
+
+                $this->clearCurrencyCache($currencyId);
+            });
+
+            DB::commit();
+
+            return $this->success(
+                new CurrencyResource($currency->fresh()),
+                'تم تحديث العملة بنجاح'
+            );
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Currency update failed', [
+                'error' => $e->getMessage(),
+                'id'    => $currency->id,
+            ]);
+
+            return $this->error(
+                'تعذر إتمام العملية. يرجى المحاولة مرة أخرى.',
+                null,
+                422
+            );
+        }
+    }
+
+    public function destroy(int $currency): JsonResponse
+    {
+        $currency = $this->currencyRepository->findById($currency);
+
+        if (! $currency) {
+            return $this->error(
+                'العملة غير موجودة',
+                null,
+                404
+            );
+        }
+
+        $linkedCount = $this->currencyRepository->linkedRecordsCount($currency->id);
+
+        if ($linkedCount > 0) {
+            return $this->error(
+                'لا يمكن حذف العملة لأنها مرتبطة بـ' . $linkedCount . ' سجل (حجوزات/معاملات/رحلات). قم بنقل أو حذف السجلات المرتبطة أولاً.',
+                null,
+                422
+            );
+        }
+
+        $oldData = $currency->toArray();
+        $currencyId = $currency->id;
+
+        try {
+            DB::beginTransaction();
+
+            $this->currencyRepository->delete($currencyId);
+
+            DB::afterCommit(function () use ($currencyId, $oldData) {
+                $this->auditService->log(
+                    auth()->id(),
+                    'delete',
+                    'currencies',
+                    $currencyId,
+                    $oldData,
+                    null
+                );
+
+                $this->clearCurrencyCache($currencyId);
+            });
+
+            DB::commit();
+
+            return $this->success(
+                null,
+                'تم حذف العملة بنجاح'
+            );
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Currency destroy failed', [
+                'error' => $e->getMessage(),
+                'id'    => $currencyId,
+            ]);
+
+            return $this->error(
+                'تعذر إتمام عملية الحذف. يرجى المحاولة لاحقاً.',
+                null,
+                500
+            );
+        }
+    }
+
+    private function clearCurrencyCache(?int $currencyId = null): void
+    {
+        cache()->forget('currencies-list');
+
+        if ($currencyId) {
+            cache()->forget("currency_precision:{$currencyId}");
+        }
+        cache()->forget('base_currency_id');
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | دوال الويب القديمة (محفوظة كتعليقات وليست محذوفة)
+    |--------------------------------------------------------------------------
+    |
+    | كانت تعيد صفحات Blade عبر return view() / redirect().
+    | تم استبدالها بنسخ JSON أعلاه. نفس المنطق والتحقق.
+    |
+    */
+
+    /*
     public function index(IndexCurrencyRequest $request): View
     {
         $query = Currency::query();
@@ -58,7 +267,7 @@ class CurrencyController extends Controller
         $validated = $request->validated();
 
         try {
-            DB::beginTransaction(); 
+            DB::beginTransaction();
 
             $currency = Currency::create($validated);
 
@@ -75,7 +284,7 @@ class CurrencyController extends Controller
                 $this->clearCurrencyCache();
             });
 
-            DB::commit(); 
+            DB::commit();
 
             return redirect()
                 ->route('admin.currencies.index')
@@ -136,7 +345,6 @@ class CurrencyController extends Controller
         }
     }
 
-
     public function destroy(Currency $currency): JsonResponse
     {
         $linkedCount = $currency->bookings()->count()
@@ -188,15 +396,5 @@ class CurrencyController extends Controller
             ], 500);
         }
     }
-
-
-    private function clearCurrencyCache(?int $currencyId = null): void
-    {
-        cache()->forget('currencies-list');
-
-        if ($currencyId) {
-            cache()->forget("currency_precision:{$currencyId}");
-        }
-        cache()->forget('base_currency_id');
-    }
+    */
 }

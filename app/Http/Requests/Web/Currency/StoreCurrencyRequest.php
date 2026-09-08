@@ -17,7 +17,6 @@ class StoreCurrencyRequest extends FormRequest
             'code' => 'required|string|size:3|unique:currencies,code',
             'name' => 'required|string|max:100|unique:currencies,name',
             'symbol' => 'required|string|max:10',
-            'price_to_yr' => 'required|numeric|min:0.0001|max:999999',
         ];
     }
 
@@ -30,7 +29,7 @@ class StoreCurrencyRequest extends FormRequest
             'name.required' => 'اسم العملة مطلوب',
             'name.unique' => 'اسم العملة موجود مسبقاً',
             'symbol.required' => 'رمز العملة مطلوب',
-            'price_to_yr.required' => 'سعر الصرف مقابل الريال اليمني مطلوب',
+
         ];
     }
 }

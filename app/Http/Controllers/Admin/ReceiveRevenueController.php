@@ -3,25 +3,218 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\ReceiveRevenueMethod;
-use App\Models\DigitalPocket;
-use App\Models\ProviderService;
-use App\Services\AuditService;
 use App\Http\Requests\Web\ReceiveRevenue\StoreReceiveRevenueRequest;
 use App\Http\Requests\Web\ReceiveRevenue\UpdateReceiveRevenueRequest;
-use Illuminate\Http\RedirectResponse;
+use App\Http\Resources\Admin\ReceiveRevenueResource;
+use App\Repositories\Contracts\ReceiveRevenueRepositoryInterface;
+use App\Services\AuditService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\View\View;
 
 class ReceiveRevenueController extends Controller
 {
     public function __construct(
-        private AuditService $auditService
+        private AuditService $auditService,
+        private ReceiveRevenueRepositoryInterface $receiveRevenueRepository
     ) {
         $this->middleware('require.admin');
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | واجهة برمجية (API) - استجابات JSON
+    |--------------------------------------------------------------------------
+    |
+    | تم تحويل الدوال الآتية لتعمل كهيئة API باستخدام success()/error()
+    | والمنطق نفسه في دوال الويب القديمة (محفوظة بالأسفل كتعليقات).
+    |
+    */
+
+    public function index(): JsonResponse
+    {
+        $accounts = $this->receiveRevenueRepository->search([], 20);
+
+        return $this->success(
+            ReceiveRevenueResource::collection($accounts),
+            'تم استرجاع حسابات الإيراد بنجاح'
+        );
+    }
+
+    public function store(StoreReceiveRevenueRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+
+        try {
+            DB::beginTransaction();
+
+            if ($this->receiveRevenueRepository->isDuplicate($validated)) {
+                DB::rollBack();
+                return $this->error(
+                    'يوجد حساب بنكي مسجل بالفعل بنفس البيانات',
+                    null,
+                    422
+                );
+            }
+
+            $account = $this->receiveRevenueRepository->create($validated);
+
+            $accountId = $account->id;
+            $accountData = $account->toArray();
+            DB::afterCommit(function () use ($accountId, $accountData) {
+                $this->auditService->log(
+                    auth()->id(),
+                    'created',
+                    'receive_revenue_methods',
+                    $accountId,
+                    null,
+                    $accountData
+                );
+            });
+
+            DB::commit();
+
+            return $this->success(
+                new ReceiveRevenueResource($account->fresh()),
+                'تم إضافة الحساب البنكي بنجاح'
+            );
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('ReceiveRevenue store failed: ' . $e->getMessage());
+
+            return $this->error(
+                'حدث خطأ أثناء إضافة الحساب البنكي. يرجى المحاولة مرة أخرى.',
+                null,
+                422
+            );
+        }
+    }
+
+    public function update(UpdateReceiveRevenueRequest $request, int $receiveRevenue): JsonResponse
+    {
+        $account = $this->receiveRevenueRepository->findById($receiveRevenue);
+
+        if (! $account) {
+            return $this->error(
+                'حساب الإيراد غير موجود',
+                null,
+                404
+            );
+        }
+
+        $validated = $request->validated();
+        $oldData = $account->toArray();
+        $accountId = $account->id;
+
+        try {
+            DB::beginTransaction();
+
+            if ($this->receiveRevenueRepository->isDuplicate($validated, $accountId)) {
+                DB::rollBack();
+                return $this->error(
+                    'يوجد حساب بنكي مسجل بالفعل بنفس البيانات',
+                    null,
+                    422
+                );
+            }
+
+            $this->receiveRevenueRepository->update($accountId, $validated);
+
+            DB::afterCommit(function () use ($account, $oldData, $accountId) {
+                $newData = $account->fresh()->toArray();
+                $changes = array_diff_assoc($newData, $oldData);
+
+                if (!empty($changes)) {
+                    $oldSubset = array_intersect_key($oldData, $changes);
+                    $this->auditService->log(
+                        auth()->id(),
+                        'updated',
+                        'receive_revenue_methods',
+                        $accountId,
+                        $oldSubset,
+                        $changes
+                    );
+                }
+            });
+
+            DB::commit();
+
+            return $this->success(
+                new ReceiveRevenueResource($account->fresh()),
+                'تم تحديث الحساب البنكي بنجاح'
+            );
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('ReceiveRevenue update failed: ' . $e->getMessage());
+
+            return $this->error(
+                'حدث خطأ أثناء تحديث الحساب البنكي. يرجى المحاولة مرة أخرى.',
+                null,
+                422
+            );
+        }
+    }
+
+    public function destroy(int $receiveRevenue): JsonResponse
+    {
+        $account = $this->receiveRevenueRepository->findById($receiveRevenue);
+
+        if (! $account) {
+            return $this->error(
+                'حساب الإيراد غير موجود',
+                null,
+                404
+            );
+        }
+
+        $oldData = $account->toArray();
+        $accountId = $account->id;
+
+        try {
+            DB::beginTransaction();
+
+            $this->receiveRevenueRepository->delete($accountId);
+
+            DB::afterCommit(function () use ($accountId, $oldData) {
+                $this->auditService->log(
+                    auth()->id(),
+                    'deleted',
+                    'receive_revenue_methods',
+                    $accountId,
+                    $oldData,
+                    null
+                );
+            });
+
+            DB::commit();
+
+            return $this->success(
+                null,
+                'تم حذف الحساب البنكي بنجاح'
+            );
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('ReceiveRevenue destroy failed: ' . $e->getMessage());
+
+            return $this->error(
+                'لا يمكن حذف الحساب البنكي لارتباطه ببيانات أخرى.',
+                null,
+                500
+            );
+        }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | دوال الويب القديمة (محفوظة كتعليقات وليست محذوفة)
+    |--------------------------------------------------------------------------
+    |
+    | كانت تعيد صفحات Blade عبر return view() / redirect().
+    | تم استبدالها بنسخ JSON أعلاه. نفس المنطق والتحقق.
+    |
+    */
+
+    /*
     public function index(): View
     {
         $accounts = ReceiveRevenueMethod::with(['digitalPocket', 'provider'])
@@ -174,4 +367,5 @@ class ReceiveRevenueController extends Controller
                 ->with('error', 'لا يمكن حذف الحساب البنكي لارتباطه ببيانات أخرى.');
         }
     }
+    */
 }

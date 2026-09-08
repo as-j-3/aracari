@@ -13,7 +13,7 @@ Route::controller(CurrencyController::class)->prefix('currencies')->name('curren
 
     Route::middleware('throttle:10,1')->group(function () {
         Route::post('/', 'store')->name('store')->middleware('permission:currencies:create');
-        Route::put('/{currency}', 'update')->name('update')->middleware('permission:currencies:edit');
+        Route::match(['PUT', 'post'], '/{currency}', 'update')->name('update')->middleware('permission:currencies:edit');
         Route::delete('/{currency}', 'destroy')->name('destroy')->middleware('permission:currencies:delete');
     });
 });
