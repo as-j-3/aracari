@@ -40,6 +40,8 @@ use App\Repositories\Contracts\CurrencyRepositoryInterface;
 use App\Repositories\CurrencyRepository;
 use App\Repositories\Contracts\ReceiveRevenueRepositoryInterface;
 use App\Repositories\ReceiveRevenueRepository;
+use App\Repositories\Contracts\ProviderSettlementRepositoryInterface;
+use App\Repositories\ProviderSettlementRepository;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\View;
 use App\Observers\ProviderBranchObserver;
@@ -62,6 +64,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(DigitalPocketRepositoryInterface::class,DigitalPocketRepository::class);
         $this->app->bind(CurrencyRepositoryInterface::class,CurrencyRepository::class);
         $this->app->bind(ReceiveRevenueRepositoryInterface::class,ReceiveRevenueRepository::class);
+        $this->app->bind(ProviderSettlementRepositoryInterface::class,ProviderSettlementRepository::class);
     }
 
     /**

@@ -7,9 +7,12 @@ use App\Constants\TransactionReferenceStatus;
 use App\Constants\UserTypes;
 use App\Models\Account;
 use App\Models\Currency;
+use App\Models\ReceiveRevenueMethod;
+use App\Models\Setting;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Repositories\Contracts\TransactionRepositoryInterface;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -30,9 +33,8 @@ class ProviderSettlementService
 
     /**
      * جلب أرصدة مجموعة من account_codes دفعة واحدة
-     * @return \Illuminate\Support\Collection
      */
-    private function getBalancesByAccountCodes(array $accountCodes): \Illuminate\Support\Collection
+    private function getBalancesByAccountCodes(array $accountCodes): Collection
     {
         return Transaction::selectRaw('accounts.account_code, transactions.currency_id, 
                     SUM(CASE WHEN transactions.transaction_type = "credit" THEN transactions.amount ELSE -transactions.amount END) as balance')
@@ -40,7 +42,7 @@ class ProviderSettlementService
             ->whereIn('accounts.account_code', $accountCodes)
             ->groupBy('accounts.account_code', 'transactions.currency_id')
             ->get()
-            ->keyBy(fn ($item) => $item->account_code . '_' . $item->currency_id);
+            ->keyBy(fn ($item) => $item->account_code.'_'.$item->currency_id);
     }
 
     /**
@@ -51,7 +53,7 @@ class ProviderSettlementService
         $providerCode = AccountCodes::providerAccount($providerUserId);
         $accountId = $this->getAccountIdByCode($providerCode);
 
-        if (!$accountId) {
+        if (! $accountId) {
             return 0.0;
         }
 
@@ -72,16 +74,17 @@ class ProviderSettlementService
      */
     public function getProvidersWithBalances(): array
     {
-        $baseCurrencyId = \App\Models\Setting::where('key', 'base_currency_id')->value('value') ?? 1;
+        $baseCurrencyId = Setting::where('key', 'base_currency_id')->value('value') ?? 1;
 
         // 1. جلب كل المزودين مرة واحدة
         $providers = User::where('type_user_code', UserTypes::PROVIDER)
             ->with('providerService')
-            ->get();
+            ->get()
+            ->filter(fn ($p) => ! empty($p->account_code));
 
         // 2. جلب كل أرصدة المزودين مرة واحدة باستخدام استعلام مجمع مع Join
-        $providerCodes = $providers->map(fn ($p) => AccountCodes::providerAccount($p->id))->toArray();
-        
+        $providerCodes = $providers->pluck('account_code')->values()->toArray();
+
         $balances = $this->getBalancesByAccountCodes($providerCodes);
 
         $currencies = Currency::orderBy('name')->get();
@@ -91,10 +94,10 @@ class ProviderSettlementService
         foreach ($providers as $provider) {
             $providerBalances = [];
             $totalBase = 0;
-            $providerCode = AccountCodes::providerAccount($provider->id);
+            $providerCode = $provider->account_code;
 
             foreach ($currencies as $currency) {
-                $key = $providerCode . '_' . $currency->id;
+                $key = $providerCode.'_'.$currency->id;
                 $balance = $balances[$key]->balance ?? 0;
 
                 if ($balance > 0) {
@@ -103,7 +106,7 @@ class ProviderSettlementService
                     } catch (\Throwable $e) {
                         $rate = 1; // حماية: إذا لم يُوجد سعر صرف
                     }
-                    
+
                     $providerBalances[] = [
                         'currency_id' => $currency->id,
                         'currency_code' => $currency->code,
@@ -159,13 +162,13 @@ class ProviderSettlementService
             return ['success' => false, 'message' => 'يجب أن يكون مبلغ التسوية أكبر من صفر'];
         }
 
-        $baseCurrencyId = (int) (\App\Models\Setting::where('key', 'base_currency_id')->value('value') ?? 1);
+        $baseCurrencyId = (int) (Setting::where('key', 'base_currency_id')->value('value') ?? 1);
         $currencyId = $currencyId ?? $baseCurrencyId;
 
         try {
             $exchangeRate = app(ExchangeRateService::class)->getRate($currencyId, $baseCurrencyId);
 
-            if (!$exchangeRate || $exchangeRate <= 0) {
+            if (! $exchangeRate || $exchangeRate <= 0) {
                 return ['success' => false, 'message' => 'سعر الصرف غير متاح للعملة المختارة'];
             }
 
@@ -175,11 +178,11 @@ class ProviderSettlementService
             $this->ensureSettlementAccountsExist($actorId ?? 1);
 
             //  كل العملية داخل transaction مع lockForUpdate على حساب المزود
-            return DB::transaction(function () use ($providerUserId, $amount, $revenueMethodId, $actorId, $currencyId, $baseCurrencyId, $exchangeRate, $provider) {
-                $providerCode = AccountCodes::providerAccount($providerUserId);
+            return DB::transaction(function () use ($providerUserId, $amount, $revenueMethodId, $actorId, $currencyId, $exchangeRate, $provider) {
+                $providerCode = User::find($providerUserId)?->account_code;
                 $providerAccountId = Account::where('account_code', $providerCode)->value('id');
 
-                if (!$providerAccountId) {
+                if (! $providerAccountId) {
                     return [
                         'success' => false,
                         'message' => 'حساب المزود المحاسبي غير موجود',
@@ -209,14 +212,14 @@ class ProviderSettlementService
                     ];
                 }
 
-                $description = 'تسوية مستحقات مزود - ' . ($provider->name ?? $providerUserId);
+                $description = 'تسوية مستحقات مزود - '.($provider->name ?? $providerUserId);
                 if ($revenueMethodId) {
-                    $revenueMethod = \App\Models\ReceiveRevenueMethod::find($revenueMethodId);
-                    $description .= ' (طريقة الدفع: ' . ($revenueMethod->account_name ?? $revenueMethodId) . ')';
+                    $revenueMethod = ReceiveRevenueMethod::find($revenueMethodId);
+                    $description .= ' (طريقة الدفع: '.($revenueMethod->account_name ?? $revenueMethodId).')';
                 }
 
                 $reference = $this->transactionRepository->createReference([
-                    'reference_number' => 'STL-' . strtoupper(Str::random(10)),
+                    'reference_number' => 'STL-'.strtoupper(Str::random(10)),
                     'reference_type' => 'provider_settlement',
                     'reference_id' => $providerUserId,
                     'created_by' => $actorId,
@@ -249,7 +252,7 @@ class ProviderSettlementService
                     'description' => $description,
                 ]);
 
-                if (!$this->transactionRepository->validateEntryBalance($reference->id)) {
+                if (! $this->transactionRepository->validateEntryBalance($reference->id)) {
                     throw new \RuntimeException("خطأ محاسبي: قيد التسوية غير متوازن للمرجع {$reference->id}");
                 }
 
@@ -278,6 +281,7 @@ class ProviderSettlementService
                 'amount' => $amount,
                 'error' => $e->getMessage(),
             ]);
+
             return ['success' => false, 'message' => 'فشلت عملية التسوية. يرجى المحاولة مرة أخرى.'];
         }
     }
@@ -288,8 +292,8 @@ class ProviderSettlementService
      * ينشئ الحسابات الفرعية اللازمة لعمليات التسوية إذا لم تكن موجودة:
      * - CASH (النقدية) تحت ASSETS
      *
-     * @param int $actorId معرف المستخدم الذي ينفذ العملية
-     * @return void
+     * @param  int  $actorId  معرف المستخدم الذي ينفذ العملية
+     *
      * @throws \RuntimeException إذا فشل إنشاء الحسابات
      */
     private function ensureSettlementAccountsExist(int $actorId): void
@@ -314,7 +318,7 @@ class ProviderSettlementService
             $parentId = null;
             if ($accountConfig['parent_code']) {
                 $parentId = Account::where('account_code', $accountConfig['parent_code'])->value('id');
-                if (!$parentId) {
+                if (! $parentId) {
                     throw new \RuntimeException(
                         "الحساب الأصلي {$accountConfig['parent_code']} غير موجود. يرجى تشغيل الـ AccountingSeeder."
                     );
