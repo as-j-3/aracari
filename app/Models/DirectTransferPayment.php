@@ -12,6 +12,7 @@ class DirectTransferPayment extends Model
     use HasFactory;
 
     protected $fillable = [
+        'uuid',
         'payment_method_id',
         'name',
         'phone_number',

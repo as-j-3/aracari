@@ -63,7 +63,7 @@ Route::prefix('lookups')->name('lookups.')->group(function () {
         
         Route::middleware('throttle:10,1')->group(function () {
             Route::post('/', 'store')->name('store')->middleware('permission:coupon-statuses:create');
-            Route::put('/{id}', 'update')->name('update')->middleware('permission:coupon-statuses:edit');
+            Route::match(['put', 'post'], '/{id}', 'update')->name('update')->middleware('permission:coupon-statuses:edit');
             Route::delete('/{id}', 'destroy')->name('destroy')->middleware('permission:coupon-statuses:delete');
         });
     });

@@ -89,7 +89,8 @@ Route::middleware(['auth:sanctum', 'verified', 'require.admin'])
         require __DIR__.'/web/admin/commission-tax.php';
         require __DIR__.'/web/admin/provider-tax.php';
         require __DIR__.'/web/admin/bank-transfers.php';
-        
+        require __DIR__.'/web/admin/direct-transfer-payments.php';
+
 });
 /*
 // ==========================================

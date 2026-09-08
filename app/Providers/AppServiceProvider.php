@@ -46,6 +46,8 @@ use App\Repositories\Contracts\CouponRepositoryInterface;
 use App\Repositories\CouponRepository;
 use App\Repositories\Contracts\CouponStatusRepositoryInterface;
 use App\Repositories\CouponStatusRepository;
+use App\Repositories\Contracts\DirectTransferPaymentRepositoryInterface;
+use App\Repositories\DirectTransferPaymentRepository;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\View;
 use App\Observers\ProviderBranchObserver;
@@ -71,6 +73,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(ProviderSettlementRepositoryInterface::class,ProviderSettlementRepository::class);
         $this->app->bind(CouponRepositoryInterface::class,CouponRepository::class);
         $this->app->bind(CouponStatusRepositoryInterface::class,CouponStatusRepository::class);
+        $this->app->bind(DirectTransferPaymentRepositoryInterface::class,DirectTransferPaymentRepository::class);
     }
 
     /**
