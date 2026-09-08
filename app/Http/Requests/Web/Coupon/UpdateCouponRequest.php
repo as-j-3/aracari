@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Web\Coupon;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateCouponRequest extends FormRequest
 {
@@ -13,9 +14,8 @@ class UpdateCouponRequest extends FormRequest
 
     public function rules(): array
     {
-        $couponId = $this->route('coupon')?->id ?? $this->route('id');
         return [
-            'code' => 'sometimes|string|max:50|unique:coupons,code,' . $couponId,
+            'code' => ['sometimes', 'string', 'max:50', Rule::unique('coupons', 'code')->ignore($this->route('coupon'), 'uuid')],
             'percentage' => 'sometimes|numeric|min:0|max:100',
             'status_id' => 'sometimes|exists:coupon_statuses,id',
             'start_date' => 'nullable|date',

@@ -6,30 +6,204 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Web\Coupon\StoreCouponRequest;
 use App\Http\Requests\Web\Coupon\UpdateCouponRequest;
 use App\Http\Requests\Web\Coupon\IndexCouponRequest;
-use App\Models\Coupon;
-use App\Models\CouponStatus as CouponStatusModel;
+use App\Http\Resources\Admin\CouponResource;
+use App\Repositories\Contracts\CouponRepositoryInterface;
 use App\Services\AuditService;
-use App\Services\CouponService;
-use Illuminate\View\View;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Database\Eloquent\Builder;
 
 class CouponController extends Controller
 {
-    protected AuditService $auditService;
-    protected CouponService $couponService;
-
-    public function __construct(AuditService $auditService, CouponService $couponService)
-    {
-        $this->auditService = $auditService;
-        $this->couponService = $couponService;
+    public function __construct(
+        private AuditService $auditService,
+        private CouponRepositoryInterface $couponRepository
+    ) {
         $this->middleware('require.admin');
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | واجهة برمجية (API) - استجابات JSON
+    |--------------------------------------------------------------------------
+    |
+    | تم تحويل الدوال الآتية لتعمل كهيئة API باستخدام success()/error()
+    | والمنطق نفسه في دوال الويب القديمة (محفوظة بالأسفل كتعليقات).
+    |
+    */
+
+    public function index(IndexCouponRequest $request): JsonResponse
+    {
+        $coupons = $this->couponRepository->search(
+            $request->validated(),
+            $request->validated('per_page') ?? 15
+        );
+
+        return $this->success(
+            CouponResource::collection($coupons),
+            'تم استرجاع الكوبونات بنجاح'
+        );
+    }
+
+    public function store(StoreCouponRequest $request): JsonResponse
+    {
+        try {
+            $coupon = $this->couponRepository->create($request->validated(), auth()->id());
+
+            DB::afterCommit(function () use ($coupon) {
+                $this->auditService->log(
+                    auth()->id(),
+                    'create',
+                    'coupons',
+                    $coupon->id,
+                    null,
+                    $coupon->fresh()->toArray()
+                );
+            });
+
+            return $this->success(
+                new CouponResource($coupon->fresh()),
+                'تم إضافة الكوبون بنجاح'
+            );
+        } catch (\Exception $e) {
+            Log::error('Coupon store failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return $this->error(
+                'فشل إضافة الكوبون. يرجى المحاولة مرة أخرى.',
+                null,
+                422
+            );
+        }
+    }
+
+    public function update(UpdateCouponRequest $request, string $coupon): JsonResponse
+    {
+        $couponModel = $this->couponRepository->findByUuid($coupon);
+
+        if (! $couponModel) {
+            return $this->error(
+                'الكوبون غير موجود',
+                null,
+                404
+            );
+        }
+
+        $oldData = $couponModel->toArray();
+
+        try {
+            $result = $this->couponRepository->update($couponModel, $request->validated());
+
+            if (! $result['success']) {
+                return $this->error(
+                    $result['message'],
+                    null,
+                    422
+                );
+            }
+
+            DB::afterCommit(function () use ($couponModel, $oldData) {
+                $this->auditService->log(
+                    auth()->id(),
+                    'update',
+                    'coupons',
+                    $couponModel->id,
+                    $oldData,
+                    $couponModel->fresh()->toArray()
+                );
+            });
+
+            return $this->success(
+                new CouponResource($couponModel->fresh()),
+                $result['message']
+            );
+        } catch (\Exception $e) {
+            Log::error('Coupon update failed', [
+                'error' => $e->getMessage(),
+                'id'    => $couponModel->id,
+            ]);
+
+            return $this->error(
+                'حدث خطأ غير متوقع أثناء تحديث الكوبون.',
+                null,
+                422
+            );
+        }
+    }
+
+    public function destroy(string $coupon): JsonResponse
+    {
+        $couponModel = $this->couponRepository->findByUuid($coupon);
+
+        if (! $couponModel) {
+            return $this->error(
+                'الكوبون غير موجود',
+                null,
+                404
+            );
+        }
+
+        if ($this->couponRepository->hasUsages($couponModel)) {
+            return $this->error(
+                'لا يمكن حذف كوبون مستخدم في حجوزات',
+                null,
+                422
+            );
+        }
+
+        $couponId = $couponModel->id;
+        $oldData = $couponModel->toArray();
+
+        try {
+            DB::beginTransaction();
+
+            $this->couponRepository->delete($couponModel);
+
+            DB::afterCommit(function () use ($couponId, $oldData) {
+                $this->auditService->log(
+                    auth()->id(),
+                    'delete',
+                    'coupons',
+                    $couponId,
+                    $oldData,
+                    null
+                );
+            });
+
+            DB::commit();
+
+            return $this->success(
+                null,
+                'تم حذف الكوبون بنجاح'
+            );
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Coupon destroy failed', [
+                'error' => $e->getMessage(),
+                'id'    => $couponId,
+            ]);
+
+            return $this->error(
+                'تعذر إتمام عملية الحذف. يرجى المحاولة لاحقاً.',
+                null,
+                500
+            );
+        }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | دوال الويب القديمة (محفوظة كتعليقات وليست محذوفة)
+    |--------------------------------------------------------------------------
+    |
+    | كانت تعيد صفحات Blade عبر return view() / redirect().
+    | تم استبدالها بنسخ JSON أعلاه. نفس المنطق والتحقق.
+    |
+    */
+
+    /*
     public function index(IndexCouponRequest $request): View
     {
         $query = Coupon::with('status');
@@ -186,11 +360,5 @@ class CouponController extends Controller
                 ->with('error', 'تعذر إتمام عملية الحذف. يرجى المحاولة لاحقاً.');
         }
     }
-
-    private function getCouponStatuses()
-    {
-        return cache()->remember('coupon-statuses-list', 3600, function () {
-            return CouponStatusModel::orderBy('name')->get(['id', 'name']);
-        });
-    }
+    */
 }

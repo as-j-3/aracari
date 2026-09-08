@@ -13,7 +13,7 @@ Route::prefix('coupons')->name('coupons.')->group(function () {
     
     Route::middleware('throttle:10,1')->group(function () {
         Route::post('/', [CouponController::class, 'store'])->name('store')->middleware('permission:coupons:create');
-        Route::put('/{coupon}', [CouponController::class, 'update'])->name('update')->middleware('permission:coupons:edit');
+        Route::match(['put','post'], '/{coupon}', [CouponController::class, 'update'])->name('update')->middleware('permission:coupons:edit');
         Route::delete('/{coupon}', [CouponController::class, 'destroy'])->name('destroy')->middleware('permission:coupons:delete');
     });
 });

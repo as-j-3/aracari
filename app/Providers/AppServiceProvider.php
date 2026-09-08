@@ -42,6 +42,10 @@ use App\Repositories\Contracts\ReceiveRevenueRepositoryInterface;
 use App\Repositories\ReceiveRevenueRepository;
 use App\Repositories\Contracts\ProviderSettlementRepositoryInterface;
 use App\Repositories\ProviderSettlementRepository;
+use App\Repositories\Contracts\CouponRepositoryInterface;
+use App\Repositories\CouponRepository;
+use App\Repositories\Contracts\CouponStatusRepositoryInterface;
+use App\Repositories\CouponStatusRepository;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\View;
 use App\Observers\ProviderBranchObserver;
@@ -65,6 +69,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(CurrencyRepositoryInterface::class,CurrencyRepository::class);
         $this->app->bind(ReceiveRevenueRepositoryInterface::class,ReceiveRevenueRepository::class);
         $this->app->bind(ProviderSettlementRepositoryInterface::class,ProviderSettlementRepository::class);
+        $this->app->bind(CouponRepositoryInterface::class,CouponRepository::class);
+        $this->app->bind(CouponStatusRepositoryInterface::class,CouponStatusRepository::class);
     }
 
     /**
