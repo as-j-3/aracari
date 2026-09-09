@@ -2,7 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\ReportController;
-
+/*
 Route::prefix('reports')->name('reports.')->group(function () {
     
     Route::middleware('throttle:30,1')->group(function () {
@@ -15,3 +15,4 @@ Route::prefix('reports')->name('reports.')->group(function () {
             ->middleware('permission:reports:audit');
     });
 });
+*/

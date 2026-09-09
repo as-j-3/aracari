@@ -2,14 +2,16 @@
 
 namespace App\Services;
 
-use App\Models\Booking;
-use App\Models\User;
-use App\Models\Trip;
-use App\Models\AuditLog;
-use App\Services\ReportOptimizationService;
-use Carbon\Carbon;
 use App\Constants\BookingStatus;
 use App\Constants\TripStatus;
+use App\Models\AuditLog;
+use App\Models\Booking;
+use App\Models\Trip;
+use App\Models\User;
+use Carbon\Carbon;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
+use App\Models\Transaction;
 
 class ReportService
 {
@@ -17,21 +19,35 @@ class ReportService
         private ReportOptimizationService $optimizationService
     ) {}
 
-    public function getAuditLogs(array $filters, ?int $providerId = null): \Illuminate\Contracts\Pagination\LengthAwarePaginator
+    public function getAuditLogs(array $filters, ?int $providerId = null): LengthAwarePaginator
     {
         $query = AuditLog::with(['performer:id,name'])->latest();
 
         if ($providerId) {
             $query->where('user_id', $providerId);
-        } elseif (!empty($filters['user_id'])) {
+        } elseif (! empty($filters['user_id'])) {
             $query->where('user_id', $filters['user_id']);
         }
 
-        if (!empty($filters['action'])) $query->where('action', 'like', '%' . $filters['action'] . '%');
-        if (!empty($filters['date_from'])) $query->whereDate('created_at', '>=', $filters['date_from']);
-        if (!empty($filters['date_to'])) $query->whereDate('created_at', '<=', $filters['date_to']);
+        if (! empty($filters['action'])) {
+            $query->where('action', 'like', '%'.$filters['action'].'%');
+        }
+        if (! empty($filters['date_from'])) {
+            $query->whereDate('created_at', '>=', $filters['date_from']);
+        }
+        if (! empty($filters['date_to'])) {
+            $query->whereDate('created_at', '<=', $filters['date_to']);
+        }
 
         return $query->paginate(50);
+    }
+
+    public function getLatestTransactions(int $limit = 10)
+    {
+        return Transaction::with('currency')
+            ->latest()
+            ->take($limit)
+            ->get();
     }
 
     public function getUsersForReports(?int $providerId = null): \Illuminate\Database\Eloquent\Collection
@@ -50,12 +66,12 @@ class ReportService
         return $this->optimizationService->getBookingStats($startDate, $endDate, $providerId);
     }
 
-    public function getTripsReport(Carbon $startDate, Carbon $endDate, ?int $providerId = null, int $limit = 50): \Illuminate\Support\Collection
+    public function getTripsReport(Carbon $startDate, Carbon $endDate, ?int $providerId = null, int $limit = 50): Collection
     {
         return $this->optimizationService->getTripsReport($startDate, $endDate, $providerId, $limit);
     }
 
-    public function getPaymentMethodsReport(Carbon $startDate, Carbon $endDate, ?int $providerId = null): \Illuminate\Support\Collection
+    public function getPaymentMethodsReport(Carbon $startDate, Carbon $endDate, ?int $providerId = null): Collection
     {
         return $this->optimizationService->getPaymentMethodsReport($startDate, $endDate, $providerId);
     }
@@ -82,7 +98,7 @@ class ReportService
         $monthlyData = [];
         for ($month = 1; $month <= 12; $month++) {
             $monthData = $yearlyData->firstWhere('month', $month);
-            
+
             $monthlyData[] = [
                 'month' => $month,
                 'month_name' => Carbon::create($year, $month, 1)->format('F'),
@@ -91,18 +107,18 @@ class ReportService
                 'average_booking_value' => $monthData?->average_booking_value ?? 0,
             ];
         }
-        
+
         return $monthlyData;
     }
 
     public function getTripPerformanceReport(Carbon $startDate, Carbon $endDate, ?int $providerId = null): array
     {
         $trips = Trip::with([
-                'departureCity:id,name', 
-                'destinationCity:id,name', 
-                'vehicle:id,seats_count', 
-                'tripReservations.booking:id,base_amount,booking_status_id'
-            ])
+            'departureCity:id,name',
+            'destinationCity:id,name',
+            'vehicle:id,seats_count',
+            'tripReservations.booking:id,base_amount,booking_status_id',
+        ])
             ->withCount(['tripReservations as booked_seats' => function ($query) {
                 $query->whereHas('booking', function ($q) {
                     $q->where('booking_status_id', BookingStatus::CONFIRMED);
@@ -125,8 +141,8 @@ class ReportService
             $occupancyRate = $totalSeats > 0 ? ($bookedSeats / $totalSeats) * 100 : 0;
 
             $revenue = $trip->tripReservations
-                ->filter(fn($r) => $r->booking?->booking_status_id == BookingStatus::CONFIRMED)
-                ->sum(fn($r) => $r->booking->base_amount ?? 0);
+                ->filter(fn ($r) => $r->booking?->booking_status_id == BookingStatus::CONFIRMED)
+                ->sum(fn ($r) => $r->booking->base_amount ?? 0);
 
             return [
                 'trip_uuid' => $trip->uuid,
