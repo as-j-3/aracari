@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AccountController;
 use App\Http\Controllers\Admin\AccountStatementController;
 use App\Http\Controllers\Admin\BalanceSheetController;
+use App\Http\Controllers\Admin\FinalAccountController;
 use App\Http\Controllers\Admin\IncomeStatementController;
 use App\Http\Controllers\Admin\JournalEntryController;
 use App\Http\Controllers\Admin\TrialBalanceController;
@@ -27,6 +28,20 @@ Route::middleware(['auth', 'verified'])
               Route::match(['PUT', 'post'],'/{account:uuid}', 'update')->name('update')->middleware('permission:accounts:edit');
             Route::delete('/{account:uuid}', 'destroy')->name('destroy')->middleware('permission:accounts:delete');
             Route::post('/{account:uuid}/toggle-status', 'toggleStatus')->name('toggle-status')->middleware('permission:accounts:toggle-status');
+        });
+    });
+
+    Route::controller(FinalAccountController::class)->prefix('final-accounts')->name('final-accounts.')->group(function () {
+
+        Route::middleware('throttle:30,1')->group(function () {
+            Route::get('/', 'index')->name('index')->middleware('permission:final-accounts:view');
+            Route::get('/{finalAccount}', 'show')->name('show')->middleware('permission:final-accounts:view');
+        });
+
+        Route::middleware('throttle:10,1')->group(function () {
+            Route::post('/', 'store')->name('store')->middleware('permission:final-accounts:create');
+            Route::match(['PUT', 'post'], '/{finalAccount}', 'update')->name('update')->middleware('permission:final-accounts:edit');
+            Route::delete('/{finalAccount}', 'destroy')->name('destroy')->middleware('permission:final-accounts:delete');
         });
     });
 
