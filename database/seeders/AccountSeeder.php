@@ -14,36 +14,31 @@ class AccountSeeder extends Seeder
             [
                 'account_code'   => '1',
                 'account_name'   => 'الأصول',
-                'account_type'   => 'asset',
-                'normal_account' => 'main',
+                'type_account'   => 0, // 0: رئيسي (Main)
                 'account_nature' => 'debit',
             ],
             [
                 'account_code'   => '2',
                 'account_name'   => 'الالتزامات',
-                'account_type'   => 'liability',
-                'normal_account' => 'main',
+                'type_account'   => 0, // 0: رئيسي (Main)
                 'account_nature' => 'credit',
             ],
             [
                 'account_code'   => '3',
                 'account_name'   => 'حقوق الملكية',
-                'account_type'   => 'equity',
-                'normal_account' => 'main',
+                'type_account'   => 0, // 0: رئيسي (Main)
                 'account_nature' => 'credit',
             ],
             [
                 'account_code'   => '4',
                 'account_name'   => 'الإيرادات',
-                'account_type'   => 'revenue',
-                'normal_account' => 'main',
+                'type_account'   => 0, // 0: رئيسي (Main)
                 'account_nature' => 'credit',
             ],
             [
                 'account_code'   => '5',
                 'account_name'   => 'المصروفات',
-                'account_type'   => 'expense',
-                'normal_account' => 'main',
+                'type_account'   => 0, // 0: رئيسي (Main)
                 'account_nature' => 'debit',
             ],
         ];

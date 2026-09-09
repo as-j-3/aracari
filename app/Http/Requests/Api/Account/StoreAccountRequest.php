@@ -20,13 +20,13 @@ class StoreAccountRequest extends FormRequest
             // كود الحساب الأب (اختياري — بدونه يُعتبر حساباً جذرياً)
             'parent_account_code' => 'nullable|string|exists:accounts,account_code',
 
-            // نوع الحساب: رئيسي أم فرعي — يحدده العميل
-            'normal_account'      => 'required|in:main,sub',
+            // نوع الحساب: 0 = رئيسي (Main)، 1 = فرعي (Sub)
+            'type_account'        => 'required|in:0,1',
 
-            // طبيعة الرصيد: مدين أم دائن — يحدده العميل
+            // طبيعة الرصيد: مدين أم دائن
             'account_nature'      => 'required|in:debit,credit',
 
-            // الحساب الختامي المرتبط (اختياري — يُستنتج من الأب إن لم يُرسَل)
+            // الحساب الختامي المرتبط (اختياري)
             'final_account_id'    => 'nullable|integer|exists:final_accounts,final_account_id',
         ];
     }
@@ -37,8 +37,8 @@ class StoreAccountRequest extends FormRequest
             'account_name.required'      => 'اسم الحساب مطلوب.',
             'account_name.max'           => 'اسم الحساب لا يتجاوز 255 حرفاً.',
             'parent_account_code.exists' => 'كود الحساب الأب غير موجود في النظام.',
-            'normal_account.required'    => 'يرجى تحديد نوع الحساب (رئيسي أو فرعي).',
-            'normal_account.in'          => 'نوع الحساب يجب أن يكون: main أو sub.',
+            'type_account.required'      => 'يرجى تحديد نوع الحساب (رئيسي أو فرعي).',
+            'type_account.in'            => 'نوع الحساب يجب أن يكون: 0 (رئيسي) أو 1 (فرعي).',
             'account_nature.required'    => 'يرجى تحديد طبيعة الحساب (مدين أو دائن).',
             'account_nature.in'          => 'طبيعة الحساب يجب أن تكون: debit أو credit.',
             'final_account_id.exists'    => 'الحساب الختامي المختار غير موجود.',

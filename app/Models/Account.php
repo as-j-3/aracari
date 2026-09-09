@@ -14,16 +14,15 @@ class Account extends Model
         'uuid',
         'account_code',
         'account_name',
-        'account_type',
-        'normal_account',
+        'type_account',
         'account_nature',
-        'final_account_id',
         'parent_id',
+        'final_account_id',
         'created_by_user',
     ];
 
     protected $casts = [
-        'uuid'            => 'string',
+        'uuid' => 'string',
         'final_account_id' => 'integer',
     ];
 
@@ -158,7 +157,7 @@ class Account extends Model
     /** حساب الرصيد مع مراعاة طبيعة الحساب */
     public function getBalance(): float
     {
-        $debits  = $this->transactions()->where('transaction_type', 'debit')->sum('amount');
+        $debits = $this->transactions()->where('transaction_type', 'debit')->sum('amount');
         $credits = $this->transactions()->where('transaction_type', 'credit')->sum('amount');
 
         return $this->account_nature === 'debit'

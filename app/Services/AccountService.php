@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 /**
  * Service for Account operations
@@ -63,46 +64,31 @@ class AccountService
                 }
             }
 
-            // ── 2. normal_account و account_nature — من العميل مباشرةً ──────────────────
-            $normalAccount = $data['normal_account'];
-            $accountNature = $data['account_nature'];
+            // ── 2. type_account و account_nature — من العميل مباشرةً ──────────────────
+            $typeAccount = (int) $data['type_account']; // 0: Main, 1: Sub
+            $accountNature = $data['account_nature'];     // debit / credit
 
-            // ── 3. توليد account_code تلقائياً (مع قفل لمنع التضارب) ────────────
+            // ── 3. توليد account_code تلقائياً ─────────────────────────────────
             if ($parent) {
-                $accountCode = $this->generateAccountCode($parent, $normalAccount);
+                $accountCode = $this->generateAccountCode($parent, $typeAccount);
             } else {
                 // حساب جذري — نولد كوداً جذرياً تسلسلياً
                 $accountCode = $this->generateRootAccountCode();
             }
 
-            // ── 4. account_type — يُورث من الأب ───────────────────────────────
-            if ($parent) {
-                $accountType = $parent->account_type;
-            } else {
-                $accountType = $data['account_type'] ?? null;
-                if (! $accountType) {
-                    DB::rollBack();
-
-                    return [
-                        'success' => false,
-                        'message' => 'الحسابات الجذرية تتطلب تحديد نوع الحساب.',
-                    ];
-                }
-            }
-
-            // ── 5. تحديد final_account_id ─────────────────────────────────────
+            // ── 4. تحديد final_account_id ─────────────────────────────────────
             //    الأولوية: ما أرسله العميل ← ما ورثه من الأب ← null
             $finalAccountId = $data['final_account_id']
                 ?? $parent?->final_account_id
                 ?? null;
 
-            // ── 6. إنشاء الحساب ───────────────────────────────────────────────
+            // ── 5. إنشاء الحساب ───────────────────────────────────────────────
             $account = Account::create([
+                'uuid' => (string) Str::uuid(),
                 'account_name' => $data['account_name'],
                 'account_code' => $accountCode,
-                'account_type' => $accountType,
+                'type_account' => $typeAccount,
                 'account_nature' => $accountNature,
-                'normal_account' => $normalAccount,
                 'parent_id' => $parent?->id,
                 'final_account_id' => $finalAccountId,
                 'created_by_user' => $creatorId,
@@ -149,11 +135,18 @@ class AccountService
      */
     public function updateAccount(Account $account, array $data): array
     {
-        // منع تغيير account_code (يكسر المعاملات التاريخية)
+        // ── 1. حماية كود ونوع الحساب من التعديل (تمنع تخريب شجرة الحسابات) ──────
         if (isset($data['account_code']) && $data['account_code'] !== $account->account_code) {
             return [
                 'success' => false,
-                'message' => 'لا يمكن تغيير كود الحساب بعد إنشائه. هذا سيؤثر على المعاملات التاريخية.',
+                'message' => 'لا يمكن تغيير كود الحساب بعد إنشائه لحفظ سلامة شجرة الحسابات والمعاملات.',
+            ];
+        }
+
+        if (isset($data['type_account']) && (int) $data['type_account'] !== (int) $account->type_account) {
+            return [
+                'success' => false,
+                'message' => 'لا يمكن تغيير نوع الحساب (رئيسي/فرعي) بعد إنشائه.',
             ];
         }
 
@@ -162,9 +155,14 @@ class AccountService
 
             $oldData = $account->toArray();
 
-            $updateData = [
-                'account_name' => $data['account_name'] ?? $account->account_name,
-            ];
+            // ── 2. تجهيز البيانات المسموح بتحديثها فقط ───────────────────────
+            $updateData = array_filter([
+                'account_name' => $data['account_name'] ?? null,
+                'account_nature' => $data['account_nature'] ?? null,
+                'final_account_id' => array_key_exists('final_account_id', $data)
+                                      ? $data['final_account_id']
+                                      : $account->final_account_id,
+            ], fn ($value) => ! is_null($value));
 
             $account->update($updateData);
 
@@ -197,7 +195,7 @@ class AccountService
 
             return [
                 'success' => false,
-                'message' => 'فشل تحديث الحساب',
+                'message' => 'فشل تحديث الحساب: '.$e->getMessage(),
             ];
         }
     }
@@ -296,7 +294,7 @@ class AccountService
      */
     public function getParentAccounts(): Collection
     {
-        return Account::where('normal_account', 'main')
+        return Account::where('type_account', 0)
             ->orderBy('account_code')
             ->get();
     }
@@ -312,15 +310,17 @@ class AccountService
      *   - main  : parentCode + رقم تسلسلي (مثال: "1" → أول فرع رئيسي "11")
      *   - sub   : parentCode + "0001" → تسلسلي (مثال: "11" → "110001", "110002" ...)
      */
-    private function generateAccountCode(Account $parent, string $normalAccount): string
+    private function generateAccountCode(Account $parent, int $typeAccount): string
     {
-        // قفل صف الأب لمنع race condition
+        // قفل صف الأب لمنع race condition أثناء التوليد المتزامن
         Account::where('id', $parent->id)->lockForUpdate()->first();
 
-        if ($normalAccount === 'main') {
+        // 0: Main (رئيسي)
+        if ($typeAccount === 0) {
             return $this->generateMainAccountCode($parent);
         }
 
+        // 1: Sub (فرعي)
         return $this->generateSubAccountCode($parent);
     }
 
@@ -333,7 +333,7 @@ class AccountService
     private function generateMainAccountCode(Account $parent): string
     {
         $lastCode = Account::where('parent_id', $parent->id)
-            ->where('normal_account', 'main')
+            ->where('type_account', 0) // 0: Main (رئيسي)
             ->lockForUpdate()
             ->max('account_code');
 
@@ -353,25 +353,27 @@ class AccountService
      */
     private function generateSubAccountCode(Account $parent): string
     {
+        // 1. البحث عن آخر حساب فرعي (type_account = 1) تحت هذا الأب
         $lastCode = Account::where('parent_id', $parent->id)
-            ->where('normal_account', 'sub')
+            ->where('type_account', 1) // 1: Sub (فرعي)
             ->lockForUpdate()
             ->max('account_code');
 
-        // أول فرع فرعي
+        // 2. إذا لم يوجد حساب فرعي سابق لهذا الأب (أول حساب فرعي)
         if (! $lastCode) {
             $parentCode = (int) $parent->account_code;
 
-            return match ($parent->account_type) {
-                'asset' => (string) (($parentCode * 1000) + 1),
-                'liability' => (string) (($parentCode * 10000) + 1),
-                default => throw new \Exception(
-                    'لا توجد قاعدة ترقيم للحساب الفرعي لهذا النوع من الحسابات.'
-                ),
+            // نحدد الجذر الرئيسي عن طريق قراءة الحرف/الرقم الأول من كود الأب
+            $rootDigit = substr($parent->account_code, 0, 1);
+
+            return match ($rootDigit) {
+                '1' => (string) (($parentCode * 1000) + 1),  // للأصول (يبدأ بـ 1)
+                '2' => (string) (($parentCode * 100000) + 1), // للالتزامات (يبدأ بـ 2)
+                default => (string) (($parentCode * 1000) + 1), // باقي الحسابات (حقوق ملكية، إيرادات، مصروفات)
             };
         }
 
-        // الفرع التالي
+        // 3. إذا كان هناك حساب فرعي سابق: نزيد 1 على آخر كود
         return (string) ((int) $lastCode + 1);
     }
 
@@ -382,6 +384,7 @@ class AccountService
     private function generateRootAccountCode(): string
     {
         $lastCode = Account::whereNull('parent_id')
+            ->where('type_account', 0) // 0: Main (ضمان البحث بين الحسابات الرئيسية فقط)
             ->lockForUpdate()
             ->max('account_code');
 

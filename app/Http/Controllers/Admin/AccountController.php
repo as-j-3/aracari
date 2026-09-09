@@ -59,7 +59,7 @@ class AccountController extends Controller
     /**
      * عرض الحسابات الأب المتاحة لإنشاء حساب جديد.
      */
-    public function parents(): JsonResponse
+   public function parents(): JsonResponse
     {
         /*
         |--------------------------------------------------------------------------
@@ -75,11 +75,11 @@ class AccountController extends Controller
         return $this->success([
             'parent_accounts' => $parentAccounts->map(function ($account) {
                 return [
-                    'id' => $account->id,
-                    'account_code' => $account->account_code,
-                    'account_name' => $account->account_name,
+                    'id'             => $account->id,
+                    'account_code'   => $account->account_code,
+                    'account_name'   => $account->account_name,
                     'account_nature' => $account->account_nature,
-                    'normal_account' => $account->normal_account,
+                    'type_account'   => (int) $account->type_account, // 0: Main (رئيسي)
                 ];
             }),
         ], 'تم جلب الحسابات الأب بنجاح');
