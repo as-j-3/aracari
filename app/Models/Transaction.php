@@ -147,7 +147,7 @@ class Transaction extends Model
      */
     public function scopeByAccount($query, string $accountCode)
     {
-        return $query->where('account_code', $accountCode);
+        return $query->whereHas('account', fn ($q) => $q->where('account_code', $accountCode));
     }
     
 }

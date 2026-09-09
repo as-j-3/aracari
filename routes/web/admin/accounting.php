@@ -18,13 +18,13 @@ Route::middleware(['auth', 'verified'])
         
         Route::middleware('throttle:30,1')->group(function () {
             Route::get('/', 'index')->name('index')->middleware('permission:accounts:view');
-            Route::get('/create', 'create')->name('create')->middleware('permission:accounts:create');
+            Route::get('/parents', 'parents')->name('parents')->middleware('permission:accounts:create');
             Route::get('/{account:uuid}/edit', 'edit')->name('edit')->middleware('permission:accounts:edit');
         });
         
         Route::middleware('throttle:10,1')->group(function () {
             Route::post('/', 'store')->name('store')->middleware('permission:accounts:create');
-            Route::put('/{account:uuid}', 'update')->name('update')->middleware('permission:accounts:edit');
+              Route::match(['PUT', 'post'],'/{account:uuid}', 'update')->name('update')->middleware('permission:accounts:edit');
             Route::delete('/{account:uuid}', 'destroy')->name('destroy')->middleware('permission:accounts:delete');
             Route::post('/{account:uuid}/toggle-status', 'toggleStatus')->name('toggle-status')->middleware('permission:accounts:toggle-status');
         });

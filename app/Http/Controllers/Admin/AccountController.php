@@ -2,16 +2,16 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Constants\AccountCodes;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\Account\StoreAccountRequest;
+use App\Http\Requests\Api\Account\UpdateAccountRequest;
+use App\Http\Resources\Admin\AccountResource;
 use App\Models\Account;
 use App\Services\AccountService;
 use App\Services\AuditService;
-use App\Constants\AccountCodes; 
-use App\Constants\AccountTypes;
-use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\View\View;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class AccountController extends Controller
@@ -23,127 +23,216 @@ class AccountController extends Controller
         $this->middleware('require.admin');
     }
 
-    public function index(Request $request): View
+    /**
+     * عرض قائمة الحسابات مع إمكانية البحث.
+     */
+    public function index(Request $request): JsonResponse
     {
+        /*
+        |--------------------------------------------------------------------------
+        | Old Web implementation - kept for reference
+        |--------------------------------------------------------------------------
         $accounts = $this->accountService->getAccounts([
             'search' => $request->search,
         ]);
 
         return view('admin.accounts.index', compact('accounts'));
+        */
+
+        $accounts = $this->accountService->getAccounts([
+            'search' => $request->search,
+        ]);
+
+        $accounts->getCollection()->load(['parent', 'children']);
+
+        return $this->success([
+            'accounts' => AccountResource::collection($accounts->items()),
+            'pagination' => [
+                'current_page' => $accounts->currentPage(),
+                'last_page' => $accounts->lastPage(),
+                'per_page' => $accounts->perPage(),
+                'total' => $accounts->total(),
+            ],
+        ], 'تم جلب الحسابات بنجاح');
     }
 
-    public function create(): View
+    /**
+     * عرض الحسابات الأب المتاحة لإنشاء حساب جديد.
+     */
+    public function parents(): JsonResponse
     {
+        /*
+        |--------------------------------------------------------------------------
+        | Old Web implementation - kept for reference
+        |--------------------------------------------------------------------------
         return view('admin.accounts.create', [
             'parentAccounts' => $this->accountService->getParentAccounts(),
         ]);
+        */
+
+        $parentAccounts = $this->accountService->getParentAccounts();
+
+        return $this->success([
+            'parent_accounts' => $parentAccounts->map(function ($account) {
+                return [
+                    'id' => $account->id,
+                    'account_code' => $account->account_code,
+                    'account_name' => $account->account_name,
+                    'account_nature' => $account->account_nature,
+                    'normal_account' => $account->normal_account,
+                ];
+            }),
+        ], 'تم جلب الحسابات الأب بنجاح');
     }
 
-    public function store(Request $request): RedirectResponse
+    /**
+     * إنشاء حساب جديد.
+     */
+    public function store(StoreAccountRequest $request): JsonResponse
     {
         try {
-            $validated = $request->validate([
-                'account_name' => 'required|string|max:255',
-                'account_code' => 'required|string|max:50|unique:accounts,account_code',
-                'account_type' => 'required|in:' . implode(',', AccountTypes::all()),
-                'parent_id' => 'nullable|exists:accounts,id',
-            ]);
+            // account_code is generated automatically by the service from the
+            // selected parent; the client never supplies it.
+            $result = $this->accountService->createAccount($request->validated(), auth()->id());
 
-            $result = $this->accountService->createAccount($validated, auth()->id());
-
-            if (!$result['success']) {
+            if (! $result['success']) {
+                /*
+                |--------------------------------------------------------------------------
+                | Old Web implementation - kept for reference
+                |--------------------------------------------------------------------------
                 return back()->withInput()->with('error', $result['message']);
+                */
+                return $this->error($result['message'], null, 422);
             }
 
-            return redirect()->route('admin.accounting.accounts.index')
-                ->with('success', $result['message']);
+            return $this->success(
+                new AccountResource($result['data']),
+                $result['message']
+            );
         } catch (\Exception $e) {
-            Log::error('Account store failed: ' . $e->getMessage());
-            return back()->withInput()->with('error', 'حدث خطأ أثناء حفظ الحساب. يرجى المحاولة مرة أخرى.');
+            Log::error('Account store failed: '.$e->getMessage());
+
+            return $this->error('حدث خطأ أثناء حفظ الحساب. يرجى المحاولة مرة أخرى.', null, 422);
         }
     }
 
-    public function edit(Account $account): View
+    /**
+     * عرض بيانات حساب معين والحسابات الأب المتاحة للتعديل.
+     */
+    public function edit(Account $account): JsonResponse
     {
+        $parentAccounts = $this->accountService->getParentAccounts()
+            ->where('id', '!=', $account->id);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Old Web implementation - kept for reference
+        |--------------------------------------------------------------------------
         return view('admin.accounts.edit', [
             'account' => $account,
             'parentAccounts' => $this->accountService->getParentAccounts()
                 ->where('id', '!=', $account->id),
         ]);
+        */
+
+        return $this->success([
+            'account' => new AccountResource($account->load(['parent', 'children'])),
+            'parent_accounts' => AccountResource::collection($parentAccounts),
+        ], 'تم جلب بيانات الحساب بنجاح');
     }
 
-    public function update(Request $request, Account $account): RedirectResponse
+    /**
+     * تحديث اسم الحساب.
+     */
+    public function update(UpdateAccountRequest $request, Account $account): JsonResponse
     {
-        $this->ensureNotProtected($account);
+        if ($response = $this->ensureNotProtected($account)) {
+            return $response;
+        }
+
+        if ($request->has('parent_id') && $request->parent_id != $account->parent_id) {
+            /*
+            |--------------------------------------------------------------------------
+            | Old Web implementation - kept for reference
+            |--------------------------------------------------------------------------
+            return back()->withInput()
+                ->with('error', 'لا يمكن تغيير الحساب الأب لأنه قد تم استخدامه في معاملات محاسبية.');
+            */
+            return $this->error('لا يمكن تغيير الحساب الأب لأنه قد تم استخدامه في معاملات محاسبية.', null, 422);
+        }
 
         try {
-            $validated = $request->validate([
-                'account_name' => 'required|string|max:255',
+            $result = $this->accountService->updateAccount($account, [
+                'account_name' => $request->validated('account_name'),
             ]);
 
-            if ($request->has('parent_id') && $request->parent_id != $account->parent_id) {
-                return back()->withInput()
-                    ->with('error', 'لا يمكن تغيير الحساب الأب لأنه قد تم استخدامه في معاملات محاسبية.');
+            if (! $result['success']) {
+                return $this->error($result['message'], null, 422);
             }
 
-            DB::beginTransaction();
-            $oldData = $account->toArray();
-            $account->update(['account_name' => $validated['account_name']]);
-            $newData = $account->fresh()->toArray();
-
-            $accountId = $account->id;
-            DB::afterCommit(function () use ($accountId, $oldData, $newData) {
-                $this->auditService->log(
-                    auth()->id(),
-                    'update',
-                    'accounts',
-                    $accountId,
-                    $oldData,
-                    $newData
-                );
-            });
-
-            DB::commit();
-
-            return redirect()->route('admin.accounting.accounts.index')
-                ->with('success', 'تم تحديث الحساب بنجاح');
+            return $this->success(
+                new AccountResource($result['data']->load(['parent', 'children'])),
+                $result['message']
+            );
         } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Account update failed: ' . $e->getMessage());
-            return back()->withInput()->with('error', 'حدث خطأ أثناء تحديث الحساب. يرجى المحاولة مرة أخرى.');
+            Log::error('Account update failed: '.$e->getMessage());
+
+            return $this->error('حدث خطأ أثناء تحديث الحساب. يرجى المحاولة مرة أخرى.', null, 422);
         }
     }
 
-    public function destroy(Account $account): RedirectResponse
+    /**
+     * حذف حساب.
+     */
+    public function destroy(Account $account): JsonResponse
     {
-        $this->ensureNotProtected($account);
-        
+        if ($response = $this->ensureNotProtected($account)) {
+            return $response;
+        }
+
         try {
             $result = $this->accountService->deleteAccount($account);
 
-            if (!$result['success']) {
+            if (! $result['success']) {
+                /*
+                |--------------------------------------------------------------------------
+                | Old Web implementation - kept for reference
+                |--------------------------------------------------------------------------
                 return back()->with('error', $result['message']);
+                */
+                return $this->error($result['message'], null, 422);
             }
 
-            return redirect()->route('admin.accounting.accounts.index')
-                ->with('success', $result['message']);
+            return $this->success(null, $result['message']);
         } catch (\Exception $e) {
-            Log::error('Account destroy failed: ' . $e->getMessage());
-            return back()->with('error', 'تعذر إتمام عملية الحذف. يرجى المحاولة لاحقاً.');
+            Log::error('Account destroy failed: '.$e->getMessage());
+
+            return $this->error('تعذر إتمام عملية الحذف. يرجى المحاولة لاحقاً.', null, 422);
         }
     }
 
-    private function ensureNotProtected(Account $account): void
+    /**
+     * منع تعديل/حذف الحسابات النظامية الجذرية.
+     */
+    private function ensureNotProtected(Account $account): ?JsonResponse
     {
         $protectedCodes = [
             AccountCodes::ASSETS,
             AccountCodes::LIABILITIES,
             AccountCodes::REVENUE,
-            AccountCodes::EXPENSES
+            AccountCodes::EXPENSES,
         ];
 
         if (in_array($account->account_code, $protectedCodes)) {
+            /*
+            |--------------------------------------------------------------------------
+            | Old Web implementation - kept for reference
+            |--------------------------------------------------------------------------
             abort(403, 'لا يمكن تعديل أو حذف حساب نظامي جذري.');
+            */
+            return $this->error('لا يمكن تعديل أو حذف حساب نظامي جذري.', null, 403);
         }
+
+        return null;
     }
 }

@@ -41,7 +41,8 @@ class IncomeStatementController extends Controller
     private function getTransactionsDetails(string $accountCode, string $type, ?string $startDate, ?string $endDate)
     {
         $query = Transaction::with('currency')
-            ->where('account_code', $accountCode)
+            ->join('accounts', 'accounts.id', '=', 'transactions.account_id')
+            ->where('accounts.account_code', $accountCode)
             ->where('transaction_type', $type);
 
         if ($startDate) $query->whereDate('created_at', '>=', $startDate);

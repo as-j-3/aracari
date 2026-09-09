@@ -31,12 +31,13 @@ class TrialBalanceController extends Controller
 
             $accounts = Account::orderBy('account_code')->get();
 
-            $balances = Transaction::when($startDate, fn($q) => $q->whereDate('created_at', '>=', $startDate))
-                ->when($endDate, fn($q) => $q->whereDate('created_at', '<=', $endDate))
-                ->selectRaw('account_code, 
+            $balances = Transaction::join('accounts', 'accounts.id', '=', 'transactions.account_id')
+                ->when($startDate, fn($q) => $q->whereDate('transactions.created_at', '>=', $startDate))
+                ->when($endDate, fn($q) => $q->whereDate('transactions.created_at', '<=', $endDate))
+                ->selectRaw('accounts.account_code as account_code,
                     SUM(CASE WHEN transaction_type = "debit" THEN base_amount ELSE 0 END) as total_debit,
                     SUM(CASE WHEN transaction_type = "credit" THEN base_amount ELSE 0 END) as total_credit')
-                ->groupBy('account_code')
+                ->groupBy('accounts.account_code')
                 ->get()
                 ->keyBy('account_code');
 
