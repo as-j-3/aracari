@@ -3,11 +3,12 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\Report\AccountStatementRequest;
+use App\Http\Resources\Admin\AccountStatementResource;
 use App\Models\Account;
 use App\Models\Transaction;
 use App\Services\CurrencyService;
-use Illuminate\Http\Request;
-use Illuminate\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 
 class AccountStatementController extends Controller
@@ -18,20 +19,38 @@ class AccountStatementController extends Controller
         $this->middleware('require.admin');
     }
 
-    public function create(): View
+    /**
+     * عرض قائمة الحسابات المتاحة لتوليد كشف الحساب.
+     */
+    public function create(): JsonResponse
     {
+        if (! auth()->user()->hasPermission('reports:account-statement')) {
+            return $this->error('غير مصرح لك', null, 403);
+        }
+
         $accounts = cache()->remember('accounts-list', 3600, fn() => Account::orderBy('account_code')->pluck('account_name', 'account_code'));
+
+        /*
+        // الكود السابق (Web View):
         return view('admin.reports.account-statement-form', compact('accounts'));
+        */
+
+        return $this->success([
+            'accounts' => $accounts,
+        ], 'تم جلب الحسابات بنجاح');
     }
 
-    public function store(Request $request)
+    /**
+     * توليد كشف الحساب (استجابة JSON API).
+     */
+    public function store(AccountStatementRequest $request): JsonResponse
     {
+        if (! auth()->user()->hasPermission('reports:account-statement')) {
+            return $this->error('غير مصرح لك', null, 403);
+        }
+
         try {
-            $validated = $request->validate([
-                'account_code' => 'required|exists:accounts,account_code',
-                'start_date' => 'nullable|date',
-                'end_date' => 'nullable|date|after_or_equal:start_date',
-            ]);
+            $validated = $request->validated();
 
             $account = Account::where('account_code', $validated['account_code'])->firstOrFail();
             $startDate = $validated['start_date'] ?? null;
@@ -46,7 +65,7 @@ class AccountStatementController extends Controller
 
             $debitSum = $openingQuery->total_debit ?? 0;
             $creditSum = $openingQuery->total_credit ?? 0;
-            
+
             $openingBalance = in_array($account->account_type, ['asset', 'expense'], true)
                 ? $debitSum - $creditSum
                 : $creditSum - $debitSum;
@@ -65,7 +84,24 @@ class AccountStatementController extends Controller
                 $runningBalance += $this->signedAmount($transaction, $account);
 
                 return [
-                    'transaction' => $transaction,
+                    'transaction' => [
+                        'uuid' => $transaction->uuid,
+                        'transaction_type' => $transaction->transaction_type,
+                        'amount' => (float) $transaction->amount,
+                        'base_amount' => (float) $transaction->base_amount,
+                        'description' => $transaction->description,
+                        'created_at' => $transaction->created_at->toDateTimeString(),
+                        'reference' => $transaction->relationLoaded('reference') ? [
+                            'uuid' => $transaction->reference->uuid,
+                            'reference_number' => $transaction->reference->reference_number,
+                            'created_by' => $transaction->reference->created_by,
+                        ] : null,
+                        'currency' => $transaction->relationLoaded('currency') ? [
+                            'id' => $transaction->currency->id,
+                            'code' => $transaction->currency->code,
+                            'name' => $transaction->currency->name,
+                        ] : null,
+                    ],
                     'debit' => $transaction->transaction_type === 'debit' ? $transaction->base_amount : 0,
                     'credit' => $transaction->transaction_type === 'credit' ? $transaction->base_amount : 0,
                     'running_balance' => $runningBalance,
@@ -73,15 +109,30 @@ class AccountStatementController extends Controller
             });
 
             $closingBalance = $runningBalance;
-            
+
             $baseCurrencyCode = $this->currencyService->baseCurrency()->code ?? '-';
 
+            /*
+            // الكود السابق (Web View):
             return view('admin.reports.account-statement', compact(
                 'account', 'statementLines', 'openingBalance', 'closingBalance', 'startDate', 'endDate', 'baseCurrencyCode'
             ));
+            */
+
+            return $this->success(
+                new AccountStatementResource($account, [
+                    'opening_balance' => $openingBalance,
+                    'statement_lines' => $statementLines,
+                    'closing_balance' => $closingBalance,
+                    'start_date' => $startDate,
+                    'end_date' => $endDate,
+                    'base_currency_code' => $baseCurrencyCode,
+                ]),
+                'تم توليد كشف الحساب بنجاح'
+            );
         } catch (\Exception $e) {
             Log::error('Account statement generation failed: ' . $e->getMessage());
-            return back()->with('error', 'حدث خطأ أثناء توليد كشف الحساب. يرجى المحاولة لاحقاً.');
+            return $this->error('حدث خطأ أثناء توليد كشف الحساب. يرجى المحاولة لاحقاً.');
         }
     }
 
