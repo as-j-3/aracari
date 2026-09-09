@@ -9,7 +9,7 @@ use App\Http\Requests\Web\Passenger\IndexPassengerRequest;
 use App\Http\Resources\PassengerResource;
 use App\Models\Passenger;
 use App\Models\Gender;
-use App\Constants\CountryCodes;
+use App\Models\Country;
 use App\Services\AuditService;
 use App\Services\FileUploadService;
 use Illuminate\Http\JsonResponse;
@@ -71,7 +71,7 @@ class PassengerController extends Controller
         */
 
         // كود الـ API:
-        $query = Passenger::with(['gender', 'creator'])
+        $query = Passenger::with(['gender', 'creator', 'passportCountry', 'passportCity', 'personalCountry', 'personalCity'])
             ->withCount(['tripReservations']);
 
         if ($search = $request->get('search')) {
@@ -108,7 +108,7 @@ class PassengerController extends Controller
     public function create(): View
     {
         $genders = Gender::all();
-        $countries = CountryCodes::all();
+        $countries = Country::with('cities')->get();
         return view('admin.passengers.create', compact('genders', 'countries'));
     }
 
@@ -224,7 +224,7 @@ class PassengerController extends Controller
             DB::commit();
 
             return $this->success(
-                new PassengerResource($passenger->fresh()->load(['gender', 'creator'])),
+                new PassengerResource($passenger->fresh()->load(['gender', 'creator', 'passportCountry', 'passportCity', 'personalCountry', 'personalCity'])),
                 'تم إضافة المسافر بنجاح',
                 201
             );
@@ -254,7 +254,7 @@ class PassengerController extends Controller
         */
 
         // كود الـ API:
-        $passenger->load(['gender', 'creator', 'tripReservations.trip']);
+        $passenger->load(['gender', 'creator', 'tripReservations.trip', 'passportCountry', 'passportCity', 'personalCountry', 'personalCity']);
         return $this->success(new PassengerResource($passenger), 'تم جلب بيانات المسافر بنجاح');
     }
 
@@ -263,7 +263,7 @@ class PassengerController extends Controller
     */
     public function edit(Passenger $passenger): View
     {
-        $countries = CountryCodes::all();
+        $countries = Country::with('cities')->get();
         $genders = Gender::all();
         return view('admin.passengers.edit', compact('passenger', 'genders', 'countries'));
     }
@@ -393,7 +393,7 @@ class PassengerController extends Controller
             DB::commit();
 
             return $this->success(
-                new PassengerResource($passenger->fresh()->load(['gender', 'creator'])),
+                new PassengerResource($passenger->fresh()->load(['gender', 'creator', 'passportCountry', 'passportCity', 'personalCountry', 'personalCity'])),
                 'تم تحديث المسافر بنجاح'
             );
         } catch (\Exception $e) {

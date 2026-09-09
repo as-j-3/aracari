@@ -24,14 +24,16 @@ class Passenger extends Model
         'birthday',
         'personal_card_id',
         'personal_card_id_photo',
-        'personal_card_place_of_issue',
+        'personal_country_place_of_issue',
+        'personal_city_place_of_issue',
         'personal_card_date_issu',
         'personal_card_date_expiry',
         'passport_number',
         'passport_photo',
+        'passport_country_place_of_issue',
+        'passport_city_place_of_issue',
         'passport_date_issu',
         'passport_date_expiry',
-        'passport_place_of_issue',
     ];
 
     protected $casts = [
@@ -88,6 +90,38 @@ class Passenger extends Model
     public function gender()
     {
         return $this->belongsTo(Gender::class);
+    }
+
+    /**
+     * دولة إصدار جواز السفر
+     */
+    public function passportCountry()
+    {
+        return $this->belongsTo(Country::class, 'passport_country_place_of_issue');
+    }
+
+    /**
+     * مدينة إصدار جواز السفر
+     */
+    public function passportCity()
+    {
+        return $this->belongsTo(City::class, 'passport_city_place_of_issue');
+    }
+
+    /**
+     * دولة إصدار البطاقة الشخصية
+     */
+    public function personalCountry()
+    {
+        return $this->belongsTo(Country::class, 'personal_country_place_of_issue');
+    }
+
+    /**
+     * مدينة إصدار البطاقة الشخصية
+     */
+    public function personalCity()
+    {
+        return $this->belongsTo(City::class, 'personal_city_place_of_issue');
     }
 
     /**

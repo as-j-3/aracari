@@ -27,14 +27,16 @@ class InitiateBookingRequest extends FormRequest
             'passengers.*.phone_number'                 => 'nullable|string|regex:/^[0-9]+$/|max:20',
             'passengers.*.personal_card_id'             => 'nullable|string|max:50',
             'passengers.*.personal_card_id_photo'       => 'nullable|string|max:255',
-            'passengers.*.personal_card_place_of_issue' => 'nullable|string|max:255',
+            'passengers.*.personal_country_place_of_issue' => 'nullable|integer|exists:countries,id',
+            'passengers.*.personal_city_place_of_issue' => 'nullable|integer|exists:cities,id',
             'passengers.*.personal_card_date_issu'      => 'nullable|date|before_or_equal:today',
             'passengers.*.personal_card_date_expiry'    => 'nullable|date|after:passengers.*.personal_card_date_issu',
             'passengers.*.passport_number'              => 'nullable|string|max:50',
             'passengers.*.passport_photo'               => 'nullable|string|max:255',
+            'passengers.*.passport_country_place_of_issue' => 'nullable|integer|exists:countries,id',
+            'passengers.*.passport_city_place_of_issue' => 'nullable|integer|exists:cities,id',
             'passengers.*.passport_date_issu'           => 'nullable|date',
             'passengers.*.passport_date_expiry'         => 'nullable|date|after:passengers.*.passport_date_issu',
-            'passengers.*.passport_place_of_issue'      => 'nullable|string|max:255',
         ];
     }
 
@@ -91,6 +93,26 @@ class InitiateBookingRequest extends FormRequest
                 $bookingDeadline = $trip->departure_time->subHours(2);
                 if (now() > $bookingDeadline) {
                     $validator->errors()->add('trip', 'انتهى وقت حجز هذه الرحلة');
+                }
+            }
+
+            // التحقق من أن مدينة الإصدار تنتمي إلى الدولة المختارة لكل مسافر
+            foreach ($this->input('passengers', []) as $index => $passenger) {
+                $pairs = [
+                    ['personal_country_place_of_issue', 'personal_city_place_of_issue'],
+                    ['passport_country_place_of_issue', 'passport_city_place_of_issue'],
+                ];
+
+                foreach ($pairs as [$countryField, $cityField]) {
+                    $countryId = $passenger[$countryField] ?? null;
+                    $cityId = $passenger[$cityField] ?? null;
+
+                    if ($countryId && $cityId) {
+                        $city = \App\Models\City::find($cityId);
+                        if (! $city || (int) $city->country_id !== (int) $countryId) {
+                            $validator->errors()->add("passengers.$index.$cityField", 'المدينة المحددة لا تنتمي إلى الدولة المختارة');
+                        }
+                    }
                 }
             }
         });

@@ -250,14 +250,16 @@ class BookingService
                     'phone_number' => $pData['phone_number'] ?? null,
                     'personal_card_id' => $pData['personal_card_id'] ?? null,
                     'personal_card_id_photo' => $pData['personal_card_id_photo'] ?? null,
-                    'personal_card_place_of_issue' => $pData['personal_card_place_of_issue'] ?? null,
+                    'personal_country_place_of_issue' => $pData['personal_country_place_of_issue'] ?? null,
+                    'personal_city_place_of_issue' => $pData['personal_city_place_of_issue'] ?? null,
                     'personal_card_date_issu' => $pData['personal_card_date_issu'] ?? null,
                     'personal_card_date_expiry' => $pData['personal_card_date_expiry'] ?? null,
                     'passport_number' => $pData['passport_number'] ?? null,
                     'passport_photo' => $pData['passport_photo'] ?? null,
+                    'passport_country_place_of_issue' => $pData['passport_country_place_of_issue'] ?? null,
+                    'passport_city_place_of_issue' => $pData['passport_city_place_of_issue'] ?? null,
                     'passport_date_issu' => $pData['passport_date_issu'] ?? null,
                     'passport_date_expiry' => $pData['passport_date_expiry'] ?? null,
-                    'passport_place_of_issue' => $pData['passport_place_of_issue'] ?? null,
                 ]);
 
                 $this->handlePassengerFileUploads($passengerRecord, $pData);
@@ -1552,14 +1554,16 @@ class BookingService
                 'phone_number' => $individualPassengerData['phone_number'] ?? null,
                 'personal_card_id' => $individualPassengerData['personal_card_id'] ?? null,
                 'personal_card_id_photo' => $individualPassengerData['personal_card_id_photo'] ?? null,
-                'personal_card_place_of_issue' => $individualPassengerData['personal_card_place_of_issue'] ?? null,
+                'personal_country_place_of_issue' => $individualPassengerData['personal_country_place_of_issue'] ?? null,
+                'personal_city_place_of_issue' => $individualPassengerData['personal_city_place_of_issue'] ?? null,
                 'personal_card_date_issu' => $individualPassengerData['personal_card_date_issu'] ?? null,
                 'personal_card_date_expiry' => $individualPassengerData['personal_card_date_expiry'] ?? null,
                 'passport_number' => $individualPassengerData['passport_number'] ?? null,
                 'passport_photo' => $individualPassengerData['passport_photo'] ?? null,
+                'passport_country_place_of_issue' => $individualPassengerData['passport_country_place_of_issue'] ?? null,
+                'passport_city_place_of_issue' => $individualPassengerData['passport_city_place_of_issue'] ?? null,
                 'passport_date_issu' => $individualPassengerData['passport_date_issu'] ?? null,
                 'passport_date_expiry' => $individualPassengerData['passport_date_expiry'] ?? null,
-                'passport_place_of_issue' => $individualPassengerData['passport_place_of_issue'] ?? null,
             ]);
             // Handle file uploads with security validation
             // Why: Move temporary files to permanent storage with proper validation

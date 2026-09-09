@@ -283,11 +283,13 @@
                           'phone_number'                  => $passenger->phone_number,
                           'country_code'                  => '',
                           'personal_card_id'              => $passenger->personal_card_id,
-                          'personal_card_place_of_issue'  => $passenger->personal_card_place_of_issue,
+                          'personal_country_place_of_issue' => $passenger->personal_country_place_of_issue,
+                          'personal_city_place_of_issue'  => $passenger->personal_city_place_of_issue,
                           'personal_card_date_issu'       => $passenger->personal_card_date_issu ? $passenger->personal_card_date_issu->format('Y-m-d') : '',
                           'personal_card_date_expiry'     => $passenger->personal_card_date_expiry ? $passenger->personal_card_date_expiry->format('Y-m-d') : '',
                           'passport_number'               => $passenger->passport_number,
-                          'passport_place_of_issue'       => $passenger->passport_place_of_issue,
+                          'passport_country_place_of_issue' => $passenger->passport_country_place_of_issue,
+                          'passport_city_place_of_issue'  => $passenger->passport_city_place_of_issue,
                           'passport_date_issu'            => $passenger->passport_date_issu ? $passenger->passport_date_issu->format('Y-m-d') : '',
                           'passport_date_expiry'          => $passenger->passport_date_expiry ? $passenger->passport_date_expiry->format('Y-m-d') : '',
                           'existing_card_photo_url'       => $passenger->personal_card_id_photo_url,
@@ -480,18 +482,37 @@
         >
       </div>
 
-      {{-- مكان الإصدار --}}
+      {{-- دولة الإصدار --}}
       <div>
-        <label class="block text-xs font-bold text-slate-600 mb-1.5">مكان الإصدار</label>
-        <input
-            type="text"
-            name="personal_card_place_of_issue"
-            id="pax-card-place"
-            maxlength="255"
-            value="{{ old('personal_card_place_of_issue') }}"
-            placeholder="المدينة / الدولة"
+        <label class="block text-xs font-bold text-slate-600 mb-1.5">دولة الإصدار</label>
+        <select
+            name="personal_country_place_of_issue"
+            id="pax-card-country"
+            data-city-target="pax-card-city"
             class="w-full bg-[#f3f3f6] border border-[#e2e2e5] rounded-xl px-3 py-2.5 text-[13px] font-bold outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
         >
+            <option value="">اختر الدولة</option>
+            @foreach($countries as $country)
+              <option value="{{ $country->id }}" {{ old('personal_country_place_of_issue') == $country->id ? 'selected' : '' }}>{{ $country->name }}</option>
+            @endforeach
+        </select>
+      </div>
+
+      {{-- مدينة الإصدار --}}
+      <div>
+        <label class="block text-xs font-bold text-slate-600 mb-1.5">مدينة الإصدار</label>
+        <select
+            name="personal_city_place_of_issue"
+            id="pax-card-city"
+            class="w-full bg-[#f3f3f6] border border-[#e2e2e5] rounded-xl px-3 py-2.5 text-[13px] font-bold outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
+        >
+            <option value="">اختر المدينة</option>
+            @foreach($countries as $country)
+              @foreach($country->cities as $city)
+                <option value="{{ $city->id }}" data-country="{{ $country->id }}" {{ old('personal_city_place_of_issue') == $city->id ? 'selected' : '' }}>{{ $city->name }}</option>
+              @endforeach
+            @endforeach
+        </select>
       </div>
 
       {{-- تاريخ الإصدار --}}
@@ -580,18 +601,37 @@
         >
       </div>
 
-      {{-- مكان الإصدار --}}
+      {{-- دولة الإصدار --}}
       <div>
-        <label class="block text-xs font-bold text-slate-600 mb-1.5">مكان الإصدار</label>
-        <input
-            type="text"
-            name="passport_place_of_issue"
-            id="pax-passport-place"
-            maxlength="255"
-            value="{{ old('passport_place_of_issue') }}"
-            placeholder="المدينة / الدولة"
+        <label class="block text-xs font-bold text-slate-600 mb-1.5">دولة الإصدار</label>
+        <select
+            name="passport_country_place_of_issue"
+            id="pax-passport-country"
+            data-city-target="pax-passport-city"
             class="w-full bg-[#f3f3f6] border border-[#e2e2e5] rounded-xl px-3 py-2.5 text-[13px] font-bold outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
         >
+            <option value="">اختر الدولة</option>
+            @foreach($countries as $country)
+              <option value="{{ $country->id }}" {{ old('passport_country_place_of_issue') == $country->id ? 'selected' : '' }}>{{ $country->name }}</option>
+            @endforeach
+        </select>
+      </div>
+
+      {{-- مدينة الإصدار --}}
+      <div>
+        <label class="block text-xs font-bold text-slate-600 mb-1.5">مدينة الإصدار</label>
+        <select
+            name="passport_city_place_of_issue"
+            id="pax-passport-city"
+            class="w-full bg-[#f3f3f6] border border-[#e2e2e5] rounded-xl px-3 py-2.5 text-[13px] font-bold outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
+        >
+            <option value="">اختر المدينة</option>
+            @foreach($countries as $country)
+              @foreach($country->cities as $city)
+                <option value="{{ $city->id }}" data-country="{{ $country->id }}" {{ old('passport_city_place_of_issue') == $city->id ? 'selected' : '' }}>{{ $city->name }}</option>
+              @endforeach
+            @endforeach
+        </select>
       </div>
 
       {{-- تاريخ الإصدار --}}
@@ -931,6 +971,41 @@
 
     // sync live preview
     syncPassengerPreview(modal);
+
+    // filter each city select according to the chosen country
+    modal.querySelectorAll('select[data-city-target]').forEach(function(countrySelect) {
+      paxFilterCities(countrySelect);
+    });
+  });
+
+  // ===== Filter city options by the selected country =====
+  function paxFilterCities(countrySelect) {
+    var citySelect = document.getElementById(countrySelect.getAttribute('data-city-target'));
+    if (!citySelect) return;
+    var countryId = countrySelect.value;
+    var selectedCity = citySelect.value;
+    citySelect.value = '';
+
+    Array.prototype.forEach.call(citySelect.options, function(opt) {
+      var belongs = !opt.dataset.country || String(opt.dataset.country) === String(countryId);
+      opt.style.display = belongs ? '' : 'none';
+    });
+
+    // re-select the stored city if it belongs to the chosen country
+    if (selectedCity) {
+      var keep = Array.prototype.some.call(citySelect.options, function(opt) {
+        return opt.value === selectedCity && opt.style.display !== 'none';
+      });
+      if (keep) citySelect.value = selectedCity;
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('select[data-city-target]').forEach(function(countrySelect) {
+      countrySelect.addEventListener('change', function() {
+        paxFilterCities(countrySelect);
+      });
+    });
   });
 
   function escapeHtml(str) {
