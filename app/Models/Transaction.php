@@ -149,4 +149,5 @@ class Transaction extends Model
     {
         return $query->where('account_code', $accountCode);
     }
+    
 }

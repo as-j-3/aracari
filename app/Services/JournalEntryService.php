@@ -2,35 +2,37 @@
 
 namespace App\Services;
 
+use App\Constants\TransactionReferenceStatus;
 use App\Models\Account;
 use App\Models\Transaction;
 use App\Models\TransactionReference;
-use App\Constants\TransactionReferenceStatus;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 /**
  * Service for Journal Entry operations
- * 
+ *
  * Handles business logic for journal entry management
  * Follows SOLID principles with clean, maintainable code
  */
 class JournalEntryService
 {
-        public function __construct(
+    public function __construct(
         private AuditService $auditService
     ) {}
+
     /**
      * Create new journal entry with double-entry accounting validation
-     * 
+     *
      * This method creates a new manual journal entry with:
      * - Balance validation (debit = credit)
      * - Account code validation
      * - Database transaction for data integrity
-     * 
-     * @param array $data Journal entry data
-     * @param int $creatorId User ID of the creator
+     *
+     * @param  array  $data  Journal entry data
+     * @param  int  $creatorId  User ID of the creator
      * @return array Creation result with success status and message
      */
     public function createJournalEntry(array $data, int $creatorId): array
@@ -51,7 +53,7 @@ class JournalEntryService
 
             // Validate account codes
             foreach ($data['lines'] as $line) {
-                if (!$this->validateAccountCode($line['account_code'])) {
+                if (! $this->validateAccountCode($line['account_code'])) {
                     return [
                         'success' => false,
                         'message' => "الحساب {$line['account_code']} غير موجود في دليل الحسابات",
@@ -61,7 +63,7 @@ class JournalEntryService
 
             // Create reference
             $reference = TransactionReference::create([
-                'reference_number' => 'MANUAL-' . strtoupper(Str::random(8)),
+                'reference_number' => 'MANUAL-'.strtoupper(Str::random(8)),
                 'reference_type' => 'manual_journal_entry',
                 'reference_id' => null,
                 'created_by' => $creatorId,
@@ -70,18 +72,29 @@ class JournalEntryService
 
             // Create transaction lines
             foreach ($data['lines'] as $line) {
+
+                $account = $this->getAccountByCode($line['account_code']);
+
+                if (! $account) {
+                    throw new \RuntimeException(
+                        "الحساب {$line['account_code']} غير موجود في دليل الحسابات"
+                    );
+                }
+
                 Transaction::create([
                     'transaction_reference_id' => $reference->id,
-                    'account_code' => $line['account_code'],
+                    'account_id' => $account->id,
                     'transaction_type' => $line['debit'] > 0 ? 'debit' : 'credit',
-                    'amount' => $line['debit'] > 0 ? $line['debit'] : $line['credit'],
+                    'amount' => $line['debit'] > 0
+                        ? $line['debit']
+                        : $line['credit'],
                     'description' => $line['description'] ?? $data['description'],
                     'created_at' => $data['date'],
                 ]);
             }
-
             DB::commit();
             $this->auditService->log($creatorId, 'created', 'journal_entries', $reference->id, null, $reference->load('transactions')->toArray());
+
             return [
                 'success' => true,
                 'message' => 'تم إنشاء القيد المحاسبي بنجاح',
@@ -90,7 +103,7 @@ class JournalEntryService
         } catch (\Exception $e) {
             DB::rollBack();
 
-            Log::error('Failed to create journal entry: ' . $e->getMessage(), [
+            Log::error('Failed to create journal entry: '.$e->getMessage(), [
                 'journal_data' => $data,
                 'creator_id' => $creatorId,
             ]);
@@ -104,9 +117,9 @@ class JournalEntryService
 
     /**
      * Update journal entry with balance validation
-     * 
-     * @param TransactionReference $reference Reference to update
-     * @param array $data Updated journal entry data
+     *
+     * @param  TransactionReference  $reference  Reference to update
+     * @param  array  $data  Updated journal entry data
      * @return array Update result with success status and message
      */
     public function updateJournalEntry(TransactionReference $reference, array $data, int $creatorId): array
@@ -127,7 +140,7 @@ class JournalEntryService
 
             // Validate account codes
             foreach ($data['lines'] as $line) {
-                if (!$this->validateAccountCode($line['account_code'])) {
+                if (! $this->validateAccountCode($line['account_code'])) {
                     return [
                         'success' => false,
                         'message' => "الحساب {$line['account_code']} غير موجود في دليل الحسابات",
@@ -140,11 +153,22 @@ class JournalEntryService
 
             // Create new transaction lines
             foreach ($data['lines'] as $line) {
+
+                $account = $this->getAccountByCode($line['account_code']);
+
+                if (! $account) {
+                    throw new \RuntimeException(
+                        "الحساب {$line['account_code']} غير موجود في دليل الحسابات"
+                    );
+                }
+
                 Transaction::create([
                     'transaction_reference_id' => $reference->id,
-                    'account_code' => $line['account_code'],
+                    'account_id' => $account->id,
                     'transaction_type' => $line['debit'] > 0 ? 'debit' : 'credit',
-                    'amount' => $line['debit'] > 0 ? $line['debit'] : $line['credit'],
+                    'amount' => $line['debit'] > 0
+                        ? $line['debit']
+                        : $line['credit'],
                     'description' => $line['description'] ?? $data['description'],
                     'created_at' => $data['date'],
                 ]);
@@ -152,6 +176,7 @@ class JournalEntryService
 
             DB::commit();
             $this->auditService->log($creatorId, 'updated', 'journal_entries', $reference->id, null, $reference->load('transactions')->toArray());
+
             return [
                 'success' => true,
                 'message' => 'تم تحديث القيد المحاسبي بنجاح',
@@ -160,7 +185,7 @@ class JournalEntryService
         } catch (\Exception $e) {
             DB::rollBack();
 
-            Log::error('Failed to update journal entry: ' . $e->getMessage(), [
+            Log::error('Failed to update journal entry: '.$e->getMessage(), [
                 'reference_id' => $reference->id,
                 'journal_data' => $data,
             ]);
@@ -174,8 +199,8 @@ class JournalEntryService
 
     /**
      * Delete journal entry
-     * 
-     * @param TransactionReference $reference Reference to delete
+     *
+     * @param  TransactionReference  $reference  Reference to delete
      * @return array Deletion result with success status and message
      */
     public function deleteJournalEntry(TransactionReference $reference, int $actorId): array
@@ -189,6 +214,7 @@ class JournalEntryService
 
             DB::commit();
             $this->auditService->log($actorId, 'deleted', 'journal_entries', $reference->id, $reference->load('transactions')->toArray(), null);
+
             return [
                 'success' => true,
                 'message' => 'تم حذف القيد المحاسبي بنجاح',
@@ -196,7 +222,7 @@ class JournalEntryService
         } catch (\Exception $e) {
             DB::rollBack();
 
-            Log::error('Failed to delete journal entry: ' . $e->getMessage(), [
+            Log::error('Failed to delete journal entry: '.$e->getMessage(), [
                 'reference_id' => $reference->id,
             ]);
 
@@ -209,8 +235,8 @@ class JournalEntryService
 
     /**
      * Validate account code exists
-     * 
-     * @param string $accountCode Account code to validate
+     *
+     * @param  string  $accountCode  Account code to validate
      * @return bool True if account exists
      */
     private function validateAccountCode(string $accountCode): bool
@@ -222,33 +248,33 @@ class JournalEntryService
 
     /**
      * Get journal entries with filtering
-     * 
-     * @param array $filters Filter criteria
-     * @param int $perPage Items per page
-     * @return \Illuminate\Pagination\LengthAwarePaginator
+     *
+     * @param  array  $filters  Filter criteria
+     * @param  int  $perPage  Items per page
+     * @return LengthAwarePaginator
      */
     public function getJournalEntries(array $filters = [], int $perPage = 20)
     {
         $query = TransactionReference::with('transactions')
             ->orderBy('created_at', 'desc');
 
-        if (!empty($filters['search'])) {
+        if (! empty($filters['search'])) {
             $query->where(function ($q) use ($filters) {
-                $q->where('reference_number', 'like', '%' . $filters['search'] . '%')
-                  ->orWhere('description', 'like', '%' . $filters['search'] . '%');
+                $q->where('reference_number', 'like', '%'.$filters['search'].'%')
+                    ->orWhere('description', 'like', '%'.$filters['search'].'%');
             });
         }
 
-            if (!empty($filters['status'])) {
-        $query->where('status', $filters['status']);
-    }
+        if (! empty($filters['status'])) {
+            $query->where('status', $filters['status']);
+        }
 
         return $query->paginate($perPage);
     }
 
     /**
      * Get empty line template for journal entry form
-     * 
+     *
      * @return array Empty line structure
      */
     public function emptyLine(): array
@@ -263,15 +289,15 @@ class JournalEntryService
 
     /**
      * Format transactions as lines for editing
-     * 
-     * @param TransactionReference $reference Reference with transactions
+     *
+     * @param  TransactionReference  $reference  Reference with transactions
      * @return array Formatted lines
      */
     public function formatTransactionsAsLines(TransactionReference $reference): array
     {
         return $reference->transactions->map(function (Transaction $transaction) {
             return [
-                'account_code' => $transaction->account_code,
+                'account_code' => $transaction->account?->account_code,
                 'debit' => $transaction->transaction_type === 'debit' ? (float) $transaction->amount : null,
                 'credit' => $transaction->transaction_type === 'credit' ? (float) $transaction->amount : null,
                 'description' => $transaction->description,
@@ -281,9 +307,9 @@ class JournalEntryService
 
     /**
      * Mark journal entry as confirmed
-     * 
-     * @param TransactionReference $reference Reference to confirm
-     * @param int $userId User ID of the confirmer
+     *
+     * @param  TransactionReference  $reference  Reference to confirm
+     * @param  int  $userId  User ID of the confirmer
      * @return array Confirmation result with success status and message
      */
     public function markAsConfirmed(TransactionReference $reference, int $userId): array
@@ -292,7 +318,7 @@ class JournalEntryService
             return ['success' => false, 'message' => 'القيد معتمد بالفعل'];
         }
 
-        if (!$reference->isDraft()) {
+        if (! $reference->isDraft()) {
             return ['success' => false, 'message' => 'فقط القيود المعلقة يمكن اعتمادها'];
         }
 
@@ -312,21 +338,22 @@ class JournalEntryService
             return ['success' => true, 'message' => 'تم اعتماد القيد بنجاح'];
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Failed to confirm entry: ' . $e->getMessage());
+            Log::error('Failed to confirm entry: '.$e->getMessage());
+
             return ['success' => false, 'message' => 'فشل اعتماد القيد. يرجى المحاولة مرة أخرى.'];
         }
     }
 
     /**
      * Create reversal entry for a confirmed journal entry
-     * 
-     * @param TransactionReference $reference Reference to reverse
-     * @param int $userId User ID of the reverser
+     *
+     * @param  TransactionReference  $reference  Reference to reverse
+     * @param  int  $userId  User ID of the reverser
      * @return array Reversal result with success status and message
      */
     public function createReversal(TransactionReference $reference, int $userId): array
     {
-        if (!$reference->isConfirmed()) {
+        if (! $reference->isConfirmed()) {
             return ['success' => false, 'message' => 'فقط القيود المعتمدة يمكن عكسها'];
         }
 
@@ -335,7 +362,7 @@ class JournalEntryService
 
             // إنشاء قيد عكسي جديد
             $reversal = TransactionReference::create([
-                'reference_number' => 'REV-' . strtoupper(Str::random(8)),
+                'reference_number' => 'REV-'.strtoupper(Str::random(8)),
                 'reference_type' => 'reversal',
                 'reference_id' => $reference->id,
                 'status' => TransactionReferenceStatus::DRAFT,
@@ -344,15 +371,26 @@ class JournalEntryService
 
             // عكس كل سطر في القيد الأصلي
             foreach ($reference->transactions as $transaction) {
+
+                $account = Account::find($transaction->account_id);
+
+                if (! $account) {
+                    throw new \RuntimeException(
+                        "الحساب المرتبط بالحركة {$transaction->id} غير موجود"
+                    );
+                }
+
                 Transaction::create([
                     'transaction_reference_id' => $reversal->id,
-                    'account_code' => $transaction->account_code,
-                    'transaction_type' => $transaction->transaction_type === 'debit' ? 'credit' : 'debit',
+                    'account_id' => $account->id,
+                    'transaction_type' => $transaction->transaction_type === 'debit'
+                        ? 'credit'
+                        : 'debit',
                     'amount' => $transaction->amount,
-                    'currency_id' => $transaction->currency_id,        
-                    'exchange_rate' => $transaction->exchange_rate,     
-                    'base_amount' => $transaction->base_amount,         
-                    'description' => 'عكس: ' . ($transaction->description ?? ''),
+                    'currency_id' => $transaction->currency_id,
+                    'exchange_rate' => $transaction->exchange_rate,
+                    'base_amount' => $transaction->base_amount,
+                    'description' => 'عكس: '.($transaction->description ?? ''),
                 ]);
             }
 
@@ -380,22 +418,22 @@ class JournalEntryService
             ];
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Failed to reverse entry: ' . $e->getMessage());
+            Log::error('Failed to reverse entry: '.$e->getMessage());
+
             return ['success' => false, 'message' => 'فشل عكس القيد. يرجى المحاولة مرة أخرى.'];
         }
     }
 
-
     /**
      * Mark journal entry as cancelled
-     * 
-     * @param TransactionReference $reference Reference to cancel
-     * @param int $userId User ID of the canceller
+     *
+     * @param  TransactionReference  $reference  Reference to cancel
+     * @param  int  $userId  User ID of the canceller
      * @return array Cancellation result with success status and message
      */
     public function markAsCancelled(TransactionReference $reference, int $userId): array
     {
-        if (!$reference->isDraft()) {
+        if (! $reference->isDraft()) {
             return ['success' => false, 'message' => 'فقط القيود المعلقة يمكن إلغاؤها'];
         }
 
@@ -418,8 +456,14 @@ class JournalEntryService
             return ['success' => true, 'message' => 'تم إلغاء القيد بنجاح'];
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Failed to cancel entry: ' . $e->getMessage());
+            Log::error('Failed to cancel entry: '.$e->getMessage());
+
             return ['success' => false, 'message' => 'فشل إلغاء القيد. يرجى المحاولة مرة أخرى.'];
         }
+    }
+
+    private function getAccountByCode(string $accountCode): ?Account
+    {
+        return Account::where('account_code', $accountCode)->first();
     }
 }

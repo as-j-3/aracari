@@ -17,7 +17,12 @@ class StoreJournalEntryRequest extends FormRequest
             'date' => 'required|date',
             'description' => 'required|string',
             'lines' => 'required|array|min:1',
-            'lines.*.account_code' => 'required|string',
+            'lines.*.account_code' => [
+                'required',
+                'string',
+                'exists:accounts,account_code',
+                // التحقق من أن الحساب ورقة/فرعي وليس حسابًا تجميعيًا
+            ],
             'lines.*.debit' => 'required|numeric|min:0',
             'lines.*.credit' => 'required|numeric|min:0',
             'lines.*.description' => 'nullable|string',

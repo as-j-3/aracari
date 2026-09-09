@@ -40,7 +40,7 @@ Route::middleware(['auth', 'verified'])
         
         Route::middleware('throttle:10,1')->group(function () {
             Route::post('/', 'store')->name('store')->middleware('permission:journal:create');
-            Route::put('/{reference}', 'update')->name('update')->middleware('permission:journal:edit');
+            Route::match(['PUT', 'post'], '/{reference}', 'update')->name('update')->middleware('permission:journal:edit');
             Route::delete('/{reference}', 'destroy')->name('destroy')->middleware('permission:journal:delete');
             Route::post('/{reference}/confirm', 'confirm')->name('confirm')->middleware('permission:journal:edit');
             Route::post('/{reference}/reverse', 'reverse')->name('reverse')->middleware('permission:journal:edit');
